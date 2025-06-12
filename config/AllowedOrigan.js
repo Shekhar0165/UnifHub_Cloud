@@ -8,7 +8,7 @@ AllowedOrigan = [
     "http://13.203.171.150:3000",
     "http://13.203.171.150:8000",
     "http://172.31.1.108:3000",
-    "http://172.31.1.108:8000"
+    "https://unifhub.vercel.app"
 ]
 
 module.exports = AllowedOrigan
