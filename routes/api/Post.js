@@ -17,7 +17,7 @@ const {
 const auth = require('../../middleware/auth');
 const MulterConfig = require('../../config/Multer');
 // Initialize Multer for temporary file storage
-const PostUpdate = new MulterConfig('./public/post').upload();
+const PostUpdate = new MulterConfig('./public/Post').upload();
 
 // Get all posts for a user
 router.get('/user/:id', auth, GetUserPosts);
