@@ -13,8 +13,9 @@ const {
     HandleGetParticipantsByUserId,
     HandleUpdateParticipantsTeam,
     HandleSearchParticipants,
-    HandleVerifyParticipants,
+    HandleAcceptParticipants,
     HandleGetVerifyedParticipantsByUserId,
+    HandleRejectParticipants
     
 } = require('../../Controllers/application/Participants');
 const auth = require('../../middleware/auth');
@@ -29,7 +30,7 @@ router.post('/user/verify', auth, HandleGetVerifyedParticipantsByUserId);
 router.post('/declareResult', auth, HandleDeclareResult);
 router.post('/update-team', auth, HandleUpdateParticipantsTeam); // Added auth middleware
 router.post('/available/search', auth, HandleSearchParticipants);
-router.post('/verify/accept', auth, HandleVerifyParticipants);
-// router.post('/verify/reject', auth, HandleRejectParticipants);
+router.post('/verify/accept', auth, HandleAcceptParticipants);
+router.post('/verify/reject', auth, HandleRejectParticipants);
 
 module.exports = router;

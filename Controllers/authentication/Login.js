@@ -68,7 +68,7 @@ const LoginUser = async (req, res) => {
     const accessToken = jwt.sign(
       { id: account._id, type: userType, userid:userid },
       process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: '15min' }
+      { expiresIn: '1d' }
     );
 
     // Generate refresh token (expires in 7 days)
