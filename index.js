@@ -33,10 +33,12 @@ dbconnect.connect()
 const client = redis.createClient({
     socket: {
         host: process.env.Redis_URL,
-        port: process.env.Redis_PORT,
+        port: Number(process.env.Redis_PORT),
+        tls: true,  
     },
     password: process.env.Redis_Password,
 });
+
 
 client.connect()
     .then(() => console.log('✅ Connected to Redis Cloud'))
