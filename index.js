@@ -32,7 +32,7 @@ dbconnect.connect()
 
 
 const client = createClient({
-    url: process.env.Redis_URL 
+    url: "redis://default:fVuQE4z9bd9fmV4PvPyXQ5vO7AKAbMUZ@redis-15201.crce179.ap-south-1-1.ec2.redns.redis-cloud.com:15201" 
 });
 
 
