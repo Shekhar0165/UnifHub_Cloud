@@ -30,6 +30,8 @@ dbconnect.connect()
         process.exit(1);
     });
 
+console.log(process.env.Redis_URL,process.env.Redis_PORT,process.env.Redis_Password)
+
 
 const client = createClient({
     socket: {
