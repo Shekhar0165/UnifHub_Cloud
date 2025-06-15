@@ -53,13 +53,11 @@ const updateGitHubActivity = async (userId, forceUpdate = false) => {
         // Find user and get GitHub username
         const user = await User.findById(userId);
         if (!user || !user.socialLinks || !user.socialLinks.github) {
-            console.log(`No GitHub username found for user ${userId}`);
             return null;
         }
         
         const githubUsername = user.socialLinks.github.replace(/\/$/, "").split("/").pop();
         if(!githubUsername) {
-            console.log(`No GitHub username found for user ${userId}`);
             return null;
         }
         
@@ -68,7 +66,6 @@ const updateGitHubActivity = async (userId, forceUpdate = false) => {
         const username = usernameMatch ? usernameMatch[1] : githubUsername;
         
         if (!username) {
-            console.log(`Invalid GitHub username for user ${userId}: ${githubUsername}`);
             return null;
         }
         
@@ -97,7 +94,6 @@ const updateGitHubActivity = async (userId, forceUpdate = false) => {
             (new Date() - userActivity.githubActivity.lastFetched > CACHE_DURATION.GITHUB);
         
         if (!needsGitHubUpdate) {
-            console.log(`Using cached GitHub data for user ${userId}, last updated: ${userActivity.githubActivity.lastFetched}`);
             return userActivity.githubActivity;
         }
         
@@ -141,15 +137,12 @@ const updateGitHubActivity = async (userId, forceUpdate = false) => {
             
             // Save the updated activity record
             await userActivity.save();
-            console.log(`GitHub activity updated for user ${userId}, score: ${userActivity.githubActivity.score}`);
             
             return userActivity.githubActivity;
         } catch (error) {
-            console.error(`Error fetching GitHub data for user ${userId} (${username}):`, error.message);
             return null;
         }
     } catch (error) {
-        console.error('Error updating GitHub activity:', error);
         throw error;
     }
 };
@@ -172,7 +165,6 @@ const calculateUserScore = async (userId, forceUpdate = false) => {
 
         // Check if update is needed
         if (!forceUpdate && !needsActivityUpdate(userActivity)) {
-            console.log(`Using cached activity data for user ${userId}, last updated: ${userActivity.lastUpdated}`);
             return userActivity;
         }
         
@@ -306,10 +298,7 @@ const calculateUserScore = async (userId, forceUpdate = false) => {
 
         // 4. Fetch and update GitHub activity
         const githubActivity = await updateGitHubActivity(userId, forceUpdate);
-        if (githubActivity) {
-            // GitHub score is already added to totalScore in updateGitHubActivity function
-            console.log(`GitHub activity updated for user ${userId}, score: ${githubActivity.score}`);
-        }
+       
         
         // 5. Calculate weekly and monthly scores
         calculateTimeBasedScores(userActivity);
@@ -325,7 +314,6 @@ const calculateUserScore = async (userId, forceUpdate = false) => {
         
         return userActivity;
     } catch (error) {
-        console.error('Error calculating user score:', error);
         throw error;
     }
 };
@@ -593,9 +581,7 @@ exports.getUserActivity = async (req, res) => {
         if (shouldUpdate) {
             // Calculate latest activity scores
             userActivity = await calculateUserScore(userId, forceUpdate === 'true');
-            console.log("Activity calculation completed");
         } else {
-            console.log("Using cached activity data");
         }
         
         // Get user details
@@ -626,7 +612,6 @@ exports.getUserActivity = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error getting user activity:', error);
         return res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
@@ -653,7 +638,6 @@ exports.updateUserActivity = async (req, res) => {
             totalScore: userActivity.totalScore
         });
     } catch (error) {
-        console.error('Error updating user activity:', error);
         return res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
@@ -674,7 +658,6 @@ exports.recalculateAllUserActivity = async (req, res) => {
                 await calculateUserScore(user._id, true);
                 updatedUsers.push(user._id);
             } catch (error) {
-                console.error(`Error calculating score for user ${user._id}:`, error);
                 failedUsers.push({
                     userId: user._id,
                     error: error.message
@@ -691,7 +674,6 @@ exports.recalculateAllUserActivity = async (req, res) => {
             failed: failedUsers.length
         });
     } catch (error) {
-        console.error('Error recalculating all user activity:', error);
         return res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
@@ -745,7 +727,6 @@ exports.getTopUsers = async (req, res) => {
             }))
         });
     } catch (error) {
-        console.error('Error getting top users:', error);
         return res.status(500).json({ message: 'Internal server error', error: error.message });
     }
 };
@@ -759,7 +740,6 @@ exports.updateUserActivityAfterEvent = async (userId) => {
         await calculateUserScore(userId, true);
         return true;
     } catch (error) {
-        console.error('Error updating user activity after event:', error);
         return false;
     }
 };
@@ -814,7 +794,6 @@ exports.connectGitHub = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error connecting GitHub account:', error);
         return res.status(500).json({ 
             message: 'Internal server error', 
             error: error.message 
@@ -871,7 +850,6 @@ exports.getGitHubActivity = async (req, res) => {
             data: latestUserActivity.githubActivity
         });
     } catch (error) {
-        console.error('Error getting GitHub activity:', error);
         return res.status(500).json({ 
             message: 'Internal server error', 
             error: error.message 

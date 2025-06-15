@@ -134,7 +134,6 @@ const HandleUpdateReviewStatus = async (req, res) => {
                 // Update organization activity score
                 try {
                     await addReviewScore(updatedReview.organizationId, updatedReview);
-                    console.log(`Organization activity score updated for new review ${updatedReview._id}`);
                 } catch (err) {
                     console.error("Error updating organization activity score:", err);
                 }

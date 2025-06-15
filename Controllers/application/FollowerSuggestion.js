@@ -80,7 +80,6 @@ const HandleShowFollowingListToUser = async (req, res) => {
         });
         
     } catch (error) {
-        console.error("Error in follower suggestions:", error);
         return res.status(500).json({
             success: false,
             message: "Failed to get follower suggestions",
@@ -168,7 +167,6 @@ const HandleGetMoreSuggestion = async (req, res) => {
         });
         
     } catch (error) {
-        console.error("Error in getting more follower suggestions:", error);
         return res.status(500).json({
             success: false,
             message: "Failed to get more follower suggestions",
@@ -222,7 +220,6 @@ async function getSecondDegreeConnections(userId, followingList) {
             suggestionReason: "Connected to people you follow"
         }));
     } catch (error) {
-        console.error("Error getting second-degree connections:", error);
         return [];
     }
 }
@@ -259,7 +256,6 @@ async function getSimilarInterestUsers(currentUser, followingList) {
             };
         });
     } catch (error) {
-        console.error("Error getting similar interest users:", error);
         return [];
     }
 }
@@ -321,7 +317,6 @@ async function getSameBackgroundUsers(currentUser, followingList) {
             };
         });
     } catch (error) {
-        console.error("Error getting same background users:", error);
         return [];
     }
 }
@@ -370,7 +365,6 @@ async function getPopularUsers(followingList) {
             suggestionReason: "Popular on the platform"
         }));
     } catch (error) {
-        console.error("Error getting popular users:", error);
         return [];
     }
 }
@@ -396,7 +390,6 @@ async function getRecentActiveUsers(followingList) {
             suggestionReason: "Recently active"
         }));
     } catch (error) {
-        console.error("Error getting recently active users:", error);
         return [];
     }
 }

@@ -7,7 +7,6 @@ const Team = require('../../models/Teams');
 
 const HandleFindEvents = async (id, res) => {
     try {
-        console.log(id);
 
         if (!id) {
             return res.status(400).send("Invalid Request");
@@ -48,11 +47,9 @@ const HandleFindEvents = async (id, res) => {
             return res.status(200).send("You have not completed any events.");
         }
 
-        console.log(eventList);
         res.send(eventList);
 
     } catch (err) {
-        console.error(err);
         res.status(500).send("Internal Server Problem");
     }
 };
@@ -143,7 +140,6 @@ const HandleCheckEventsCompleted = async (userid) => {
         await userResume.save();
         return userResume;
     } catch (err) {
-        console.error("Error in HandleCheckEventsCompleted:", err);
         return null;
     }
 };
@@ -209,7 +205,6 @@ const checkUserTeamMembership = async (userid, userResume) => {
         // Save changes
         await userResume.save();
     } catch (err) {
-        console.error("Error checking team membership:", err);
     }
 };
 
@@ -217,7 +212,6 @@ const checkUserTeamMembership = async (userid, userResume) => {
 const generateUserResume = async (userid) => {
     try {
         // Find or create user resume
-        console.log(userid);
         let userResume = await UserResume.findOne({ UserId: userid });
         if (!userResume) {
             userResume = new UserResume({
@@ -236,7 +230,6 @@ const generateUserResume = async (userid) => {
                     isPosted: false // Mark as posted
                 });
             }
-            console.log(userResume);
             
             await userResume.save();
         }
@@ -249,7 +242,6 @@ const generateUserResume = async (userid) => {
         
         return userResume;
     } catch (err) {
-        console.error("Error generating user resume:", err);
         return null;
     }
 };
@@ -269,7 +261,6 @@ const generateResume = async (req, res) => {
         
         res.status(200).json({ message: "All user resumes updated successfully" });
     } catch (err) {
-        console.error("Error generating resumes:", err);
         res.status(500).json({ message: "Server Error", error: err.message });
     }
 };
@@ -277,7 +268,6 @@ const generateResume = async (req, res) => {
 // Update all user resumes (for nightly cron job)
 const updateAllUserResumes = async () => {
     try {
-        console.log("Starting nightly resume update at", new Date().toISOString());
         
         const Users = await User.find({});
         let updatedCount = 0;
@@ -291,10 +281,8 @@ const updateAllUserResumes = async () => {
             })
         );
         
-        console.log(`Completed nightly resume update. Updated ${updatedCount} user resumes.`);
         return { success: true, updatedCount };
     } catch (err) {
-        console.error("Error in nightly resume update:", err);
         return { success: false, error: err.message };
     }
 };
@@ -330,7 +318,6 @@ const addUserAchievement = async (userId, achievement) => {
         if (!userResume) {
             const user = await User.findById(userId);
             if (!user) {
-                console.error(`User ${userId} not found`);
                 return null;
             }
             
@@ -356,7 +343,6 @@ const addUserAchievement = async (userId, achievement) => {
         await userResume.save();
         return userResume;
     } catch (err) {
-        console.error(`Error adding achievement for user ${userId}:`, err);
         return null;
     }
 };
@@ -389,7 +375,6 @@ const trackFirstEventCompletion = async (userId, eventId, eventName, organizatio
         
         return userResume;
     } catch (err) {
-        console.error(`Error tracking first event completion for user ${userId}:`, err);
         return null;
     }
 };

@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const {
-    HandleContectUser
+    HandleGetProfileForChat,
+    handleGetOldChats
 } = require('../../Controllers/application/Chat');
 const auth = require('../../middleware/auth');
 
 // @route   POST api/chat/contact
-// router.
+router.get('/user/:userid',auth,HandleGetProfileForChat)
+router.post('/get-messages',auth,handleGetOldChats)
 
 
 

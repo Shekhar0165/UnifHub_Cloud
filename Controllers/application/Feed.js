@@ -396,7 +396,7 @@ const GetEnhancedUserFeed = async (req, res) => {
                             }
                         );
                     } catch (updateErr) {
-                        console.error(`Error updating impression for post ${postId}:`, updateErr);
+                        console.error(`Error updating impression for post ${postId}:`);
                     }
                 })
             );
@@ -404,12 +404,7 @@ const GetEnhancedUserFeed = async (req, res) => {
         
         // Remove internal weight property before sending response
         const cleanedItems = paginatedItems.map(({ weight, ...item }) => item);
-        console.log({
-            message: 'Enhanced feed retrieved successfully',
-            feed: cleanedItems,
-            page,
-            hasMore: weightedItems.length > (skip + limit)
-        })
+      
         return res.status(200).json({
             message: 'Enhanced feed retrieved successfully',
             feed: cleanedItems,
@@ -418,7 +413,6 @@ const GetEnhancedUserFeed = async (req, res) => {
         });
         
     } catch (err) {
-        console.error('Error getting enhanced feed:', err);
         return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
 };
@@ -473,7 +467,6 @@ const RecordImpression = async (req, res) => {
         });
         
     } catch (err) {
-        console.error('Error recording impression:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -485,7 +478,6 @@ const GetMoreFeedItems = async (req, res) => {
     try {
         const userId = req.user.id;
         const { page, limit = 10, viewedPosts = [] } = req.body;
-        console.log("Loading more items:", page, limit, "viewed count:", viewedPosts.length);
         
         if (!page || page < 1) {
             return res.status(400).json({ message: 'Valid page number is required' });
@@ -500,7 +492,6 @@ const GetMoreFeedItems = async (req, res) => {
         return GetEnhancedUserFeed(newReq, res);
         
     } catch (err) {
-        console.error('Error getting more feed items:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };

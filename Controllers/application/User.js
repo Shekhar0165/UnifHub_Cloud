@@ -2,13 +2,13 @@ const Post = require('../../models/Post');
 const User = require('../../models/User');
 const bcrypt = require('bcrypt');
 const CloudinaryConfig = require('../../config/CloudinaryConfig');
+const Organization = require('../../models/Organizations')
 const fs = require('fs').promises;
 
 // Get a user by ID or email
 const HandleGetUser = async (req, res) => {
   try {
     const id = req.user.id; // Authenticated user's ID'
-    console.log('Authenticated User ID:', id);
 
     // Correct query to find user by ID
     const user = await User.findOne({ _id: id }).select('-password -refreshToken -otp');
@@ -19,7 +19,6 @@ const HandleGetUser = async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
-    console.error('Error getting user:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -34,10 +33,8 @@ const HandleGetForProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    console.log(user)
     res.status(200).json(user);
   } catch (error) {
-    console.error('Error getting user:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -45,39 +42,108 @@ const HandleGetForProfile = async (req, res) => {
 const HandleSearchUser = async (req, res) => {
   try {
     const { query } = req.query;
-
-    if (!query?.trim()) {
-      return res.status(400).json({ success: false, message: "Search query is required." });
+    
+    // Enhanced validation
+    if (!query || !query.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query is required.",
+      });
     }
 
-    // Search users by `userid` or `name` using case-insensitive regex (starts with)
-    const members = await User.find(
-      {
-        $or: [
-          { userid: { $regex: `^${query}`, $options: "i" } },
-          { name: { $regex: `^${query}`, $options: "i" } }
-        ]
-      }
-    ).limit(10);
 
-    return res.status(200).json({ success: true, members });
+    const searchConditions = {
+      $or: [
+        { userid: { $regex: `^${query.trim()}`, $options: "i" } },
+        { name: { $regex: `^${query.trim()}`, $options: "i" } }
+      ]
+    };
+
+
+    // Test database connections and individual queries
+    try {
+      const userCount = await User.countDocuments();
+      
+      const orgCount = await Organization.countDocuments();
+    } catch (dbError) {
+      return res.status(500).json({ 
+        success: false, 
+        message: "Database connection error" 
+      });
+    }
+
+    // Parallel search with individual error handling
+    const [users, organizations] = await Promise.all([
+      User.find(searchConditions)
+        .limit(10)
+        .lean()
+        .catch(err => {
+          console.error('User search error:', err);
+          return [];
+        }),
+      Organization.find(searchConditions)
+        .limit(10)
+        .lean()
+        .catch(err => {
+          console.error('Organization search error:', err);
+          return [];
+        })
+    ]);
+
+
+    // Tag type for frontend distinction
+    const userResults = users.map(user => ({ 
+      ...user, 
+      type: 'user',
+      // Add displayName for consistency
+      displayName: user.name,
+      displayId: user.userid
+    }));
+    
+    const orgResults = organizations.map(org => ({ 
+      ...org, 
+      type: 'organization',
+      // Add displayName for consistency
+      displayName: org.name,
+      displayId: org.userid
+    }));
+
+    const results = [...userResults, ...orgResults];
+
+
+    return res.status(200).json({ 
+      success: true, 
+      results,
+      // Add debug info (remove in production)
+      debug: {
+        query: query.trim(),
+        userCount: users.length,
+        orgCount: organizations.length,
+        totalResults: results.length
+      }
+    });
+
   } catch (error) {
-    console.error("Search error:", error.message);
-    return res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({ 
+      success: false, 
+      message: "Server error",
+      // Add error details in development (remove in production)
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
 
 // Helper function to extract S3 key from a URL
-const extractS3KeyFromUrl = (url) => {
-  if (!url) return null;
+// const extractS3KeyFromUrl = (url) => {
+//   if (!url) return null;
   
-  const urlParts = url.split('.com/');
-  if (urlParts.length > 1) {
-    return urlParts[1];
-  }
-  return null;
-};
+//   const urlParts = url.split('.com/');
+//   if (urlParts.length > 1) {
+//     return urlParts[1];
+//   }
+//   return null;
+// };
 
 // Update user information
 const HanldeUpdateUser = async (req, res) => {
@@ -104,7 +170,6 @@ const HanldeUpdateUser = async (req, res) => {
         if (currentUser.profileImage) {
           const publicId = currentUser.profileImage.split('/').pop().split('.')[0];
           if (publicId) {
-            console.log("Deleting old profile image from Cloudinary:", publicId);
             await CloudinaryConfig.deleteFile(publicId);
           }
         }
@@ -124,7 +189,6 @@ const HanldeUpdateUser = async (req, res) => {
         if (currentUser.coverImage) {
           const publicId = currentUser.coverImage.split('/').pop().split('.')[0];
           if (publicId) {
-            console.log("Deleting old cover image from Cloudinary:", publicId);
             await CloudinaryConfig.deleteFile(publicId);
           }
         }
@@ -157,7 +221,6 @@ const HanldeUpdateUser = async (req, res) => {
 
     res.status(200).json({ message: 'User updated successfully', user });
   } catch (error) {
-    console.error('Error updating user:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -176,7 +239,6 @@ const HandleDeleteUser = async (req, res) => {
     if (user.profileImage) {
       const publicId = user.profileImage.split('/').pop().split('.')[0];
       if (publicId) {
-        console.log("Deleting profile image from Cloudinary:", publicId);
         await CloudinaryConfig.deleteFile(publicId);
       }
     }
@@ -185,7 +247,6 @@ const HandleDeleteUser = async (req, res) => {
     if (user.coverImage) {
       const publicId = user.coverImage.split('/').pop().split('.')[0];
       if (publicId) {
-        console.log("Deleting cover image from Cloudinary:", publicId);
         await CloudinaryConfig.deleteFile(publicId);
       }
     }
@@ -195,7 +256,6 @@ const HandleDeleteUser = async (req, res) => {
 
     res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {
-    console.error('Error deleting user:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -233,7 +293,6 @@ const HandleUpdatePassword = async (req, res) => {
 
     res.status(200).json({ message: 'Password updated successfully' });
   } catch (error) {
-    console.error('Error updating password:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

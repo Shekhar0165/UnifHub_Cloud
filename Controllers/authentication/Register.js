@@ -201,10 +201,19 @@ const registerUser = async (req, res) => {
         if (existingUserid) {
             return res.status(400).json({ message: 'User ID is already taken. Please choose another.' });
         }
+        
+        const existingUseridInOrg = await Organization.findOne({ userid });
+        if (existingUseridInOrg) {
+            return res.status(400).json({ message: 'User ID is already taken. Please choose another.' });
+        }
 
         // Double-check email isn't already used (in case concurrent registrations)
         const existingEmail = await User.findOne({ email });
         if (existingEmail) {
+            return res.status(400).json({ message: 'Email is already registered. Please use another email or login.' });
+        }
+        const existingEmailInOrg = await Organization.findOne({ email });
+        if (existingEmailInOrg) {
             return res.status(400).json({ message: 'Email is already registered. Please use another email or login.' });
         }
 
@@ -318,9 +327,26 @@ const registerOrganization = async (req, res) => {
         }
 
         // Double-check email isn't already used (in case concurrent registrations)
-        const existingEmail = await Organization.findOne({ email });
+       // Check if userid already exists
+        const existingUserid = await User.findOne({ userid });
+        if (existingUserid) {
+            return res.status(400).json({ message: 'User ID is already taken. Please choose another.' });
+        }
+        
+        const existingUseridInOrg = await Organization.findOne({ userid });
+        if (existingUseridInOrg) {
+            return res.status(400).json({ message: 'User ID is already taken. Please choose another.' });
+        }
+
+        // Double-check email isn't already used (in case concurrent registrations)
+        const existingEmail = await User.findOne({ email });
         if (existingEmail) {
-            return res.status(400).json({ message: 'Email is already registered. Please use another email.' });
+            return res.status(400).json({ message: 'Email is already registered. Please use another email or login.' });
+        }
+        
+        const existingEmailInOrg = await Organization.findOne({ email });
+        if (existingEmailInOrg) {
+            return res.status(400).json({ message: 'Email is already registered. Please use another email or login.' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);

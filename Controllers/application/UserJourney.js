@@ -78,7 +78,6 @@ const buildUserJourney = async (userId) => {
 
         return journey;
     } catch (error) {
-        console.error('Error in buildUserJourney:', error);
         throw new Error('Server error');
     }
 };
@@ -90,7 +89,6 @@ const HandleGetUserJourney = async (req, res) => {
         const userId = req.params.userId;
         
     } catch (error) {
-        console.error(error);
         res.status(500).json({ message: 'Internal server error' });
     }
 }

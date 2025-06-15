@@ -38,7 +38,6 @@ const HandleSendNotification = async (newParticipant, userId, formattedParticipa
 
         // Get creator information for the email signature
         const creator = await User.findById(userId).select('name email');
-        console.log("node fisa ", creator)
 
         // Properly encode the event name for the URL
         const encodedEventName = encodeURIComponent(EventName);
@@ -51,7 +50,6 @@ const HandleSendNotification = async (newParticipant, userId, formattedParticipa
                         const userDoc = await User.findById(participant.id).select('email name');
 
                         if (!userDoc || !userDoc.email) {
-                            console.warn(`Email not found for user ${participant.id}`);
                             return;
                         }
 
@@ -462,11 +460,9 @@ This is an automated message. Please do not reply directly to this email.
             })
         );
 
-        console.log("All notifications sent successfully!");
         return { success: true, message: "Team created and notifications sent" };
 
     } catch (error) {
-        console.error("Error in HandleSendNotification:", error);
         throw new Error("Failed to send team notifications");
     }
 };
@@ -985,7 +981,6 @@ const html = `<!DOCTYPE html>
             participant: participant
         });
     } catch (error) {
-        console.error("Error in HandleVerifyParticipants:", error);
         res.status(500).json({ message: "Failed to verify participant", error: error.message });
     }
 };
@@ -1533,7 +1528,6 @@ const html = `<!DOCTYPE html>
         });
 
     } catch (error) {
-        console.error("Error in HandleRejectParticipants:", error);
         res.status(500).json({
             message: "Failed to reject participant",
             error: error.message
@@ -1545,9 +1539,6 @@ const html = `<!DOCTYPE html>
 const HandleAddParticipants = async (req, res) => {
     try {
         const { eventid, participant_ids, teamName } = req.body;
-        console.log({ eventid, participant_ids, teamName })
-        console.log("Request body:", req.user.id);
-
         // Check if event exists
         const event = await Event.findById(eventid);
         if (!event) {
@@ -1684,7 +1675,6 @@ const HandleAddParticipants = async (req, res) => {
 const HandleUpdateParticipantsTeam = async (req, res) => {
     try {
         const { eventid, teamName, participant_ids } = req.body;
-        console.log({ eventid, teamName, participant_ids })
 
         // Validate required fields
         if (!eventid || !teamName || !participant_ids) {
@@ -1847,8 +1837,6 @@ const HandleUpdateParticipants = async (req, res) => {
 const HandleDeleteParticipants = async (req, res) => {
     try {
         const { id } = req.params;
-        console.log({ id })
-
         // Find and delete participant
         const deletedParticipant = await Participants.findByIdAndDelete(id);
 
@@ -1893,7 +1881,6 @@ const HandleDeclareResult = async (req, res) => {
     try {
         const { eventid, results } = req.body;
 
-        console.log({ eventid, results });
 
         // Validate event exists
         const event = await Event.findById(eventid);
@@ -1904,9 +1891,6 @@ const HandleDeclareResult = async (req, res) => {
         // Extract only the date part (YYYY-MM-DD) from eventDate and current date
         const eventDate = event.eventDate.toISOString().slice(0, 10);
         const currentDate = new Date().toISOString().slice(0, 10);
-
-        console.log("Event Date:", eventDate);
-        console.log("Current Date:", currentDate);
 
         // Check if event date is different from today's date
         if (eventDate !== currentDate) {
@@ -1981,7 +1965,6 @@ const HandleDeclareResult = async (req, res) => {
             updatedParticipants,
         });
     } catch (error) {
-        console.error("Error declaring results:", error);
         res.status(500).json({ message: "Error declaring results", error: error.message });
     }
 };
@@ -2043,7 +2026,6 @@ const HandleCheckTeam = async (req, res) => {
             return res.status(200).json({ result: true });
         }
     } catch (error) {
-        console.error("Error checking team name:", error);
         return res.status(500).json({ message: "Internal Server Error" });
     }
 };
@@ -2063,7 +2045,6 @@ const HandleGetParticipantsByEvent = async (req, res) => {
             });
         }
 
-        console.log(participants);
 
         res.status(200).json({
             message: "Participants retrieved successfully",
@@ -2119,7 +2100,6 @@ const HandleGetParticipantsByUserId = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("Error retrieving participants:", error);
         res.status(500).json({
             message: "Error retrieving participants",
             error: error.message
@@ -2167,7 +2147,6 @@ const HandleGetVerifyedParticipantsByUserId = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("Error retrieving participants:", error);
         res.status(500).json({
             message: "Error retrieving participants",
             error: error.message
@@ -2214,7 +2193,6 @@ const HandleSearchParticipants = async (req, res) => {
 
         return res.status(200).json({ success: true, members: NewMembers });
     } catch (error) {
-        console.error("Search error:", error.message);
         return res.status(500).json({ success: false, message: "Server error" });
     }
 };

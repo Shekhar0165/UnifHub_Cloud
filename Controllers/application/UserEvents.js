@@ -6,7 +6,6 @@ const Participants = require('../../models/Participants');
 const HandlGetUserEventsList = async (req, res) => {
     try {
         const { id } = req.params;
-        console.log(id);
 
         if (!id) {
             return res.status(400).send("Invalid Request");
@@ -47,11 +46,9 @@ const HandlGetUserEventsList = async (req, res) => {
             return res.status(200).send("You have not completed any events.");
         }
 
-        console.log(eventList);
         res.send(eventList);
 
     } catch (err) {
-        console.error(err);
         res.status(500).send("Internal Server Problem");
     }
 };

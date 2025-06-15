@@ -11,7 +11,6 @@ const HandleAddNewTeam = async (req, res) => {
         // Check if a team with the same name exists in the organization
         const existingTeam = await Team.findOne({ teamName, OrganizationId });
         if (existingTeam) {
-            console.log("Team already exists in this organization");
             return res.status(400).send("You have already created this team in the organization");
         }
 
@@ -107,7 +106,6 @@ const HandleAddNewTeam = async (req, res) => {
 
         res.status(201).send("Team Created Successfully");
     } catch (err) {
-        console.error("Error creating team:", err);
         res.status(500).send("Internal Server Error");
     }
 };
@@ -120,12 +118,10 @@ const HandleGetTeam = async (req, res) => {
         const findTeam = await Team.find({ OrganizationId: Orgid.id });
 
         if (!findTeam || findTeam.length === 0) {
-            console.log("No teams found");
             return res.status(404).send("No teams found for this organization");
         }
         res.status(200).json(findTeam);
     } catch (err) {
-        console.error("Error fetching teams:", err.message);
         res.status(500).send("Internal Server Error");
     }
 };
@@ -267,7 +263,6 @@ const HandleUpdateTeam = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error updating team:", error.message);
         res.status(500).json({
             message: "Internal Server Error",
             error: error.message
@@ -279,7 +274,6 @@ const HandleDeleteTeam = async (req, res) => {
     try {
         const { teamid,organizationId } = req.body;
 
-        console.log({ teamid,organizationId })
 
         // Validate team ID
         if (!teamid) {
@@ -309,7 +303,6 @@ const HandleDeleteTeam = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error deleting team:", error.message);
         res.status(500).json({
             message: "Internal Server Error",
             error: error.message

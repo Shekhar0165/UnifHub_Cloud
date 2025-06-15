@@ -11,15 +11,37 @@ const cookieParser = require("cookie-parser");
 const cron = require('node-cron');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+const redis = require('redis');
 const { scheduleDailyUpdate } = require('./Controllers/application/OrganizationJourney');
-const { HandleContectUser,HandleJoinChat } = require('./Controllers/application/Chat');
+const {
+  HandleMakeConnection,
+  HandleEnterChat,
+  HandlePrivateMessage,
+  HandleDisConnect
+}
+ = require('./Controllers/application/Chat');
+const auth = require('./middleware/auth')
 
 dbconnect.connect()
-.then(() => console.log('Database connected successfully'))
-.catch((err) => {
-    console.error('Database connection failed', err);
-    process.exit(1);
+    .then(() => console.log('Database connected successfully'))
+    .catch((err) => {
+        console.error('Database connection failed', err);
+        process.exit(1);
+    });
+
+
+const client = redis.createClient({
+    socket: {
+        host: process.env.Redis_URL,
+        port: process.env.Redis_PORT,
+    },
+    password: process.env.Redis_Password,
 });
+
+client.connect()
+    .then(() => console.log('✅ Connected to Redis Cloud'))
+    .catch(console.error);
+
 
 const app = express();
 const httpServer = createServer(app);
@@ -48,36 +70,36 @@ app.use('/', require('./routes/RefreshToken'));
 app.use('/user', require('./routes/api/User'));
 app.use('/org', require('./routes/api/Organization'));
 app.use('/reset', require('./routes/ResetPassword'));
-app.use('/events',require('./routes/api/Events'))
-app.use('/Participants',require('./routes/api/Participants'))
-app.use('/team',require('./routes/api/Team'))
-app.use('/journey',require('./routes/api/OrganizationJourney'))
-app.use('/userevent',require('./routes/api/UserEvents'))
-app.use('/userresume',require('./routes/api/UserResume'))
-app.use('/events/teams',require('./routes/api/EventsMember'))
+app.use('/events', require('./routes/api/Events'))
+app.use('/Participants', require('./routes/api/Participants'))
+app.use('/team', require('./routes/api/Team'))
+app.use('/journey', require('./routes/api/OrganizationJourney'))
+app.use('/userevent', require('./routes/api/UserEvents'))
+app.use('/userresume', require('./routes/api/UserResume'))
+app.use('/events/teams', require('./routes/api/EventsMember'))
 app.use('/user-activity', require('./routes/api/UserActivity'))
 app.use('/org-reviews', require('./routes/api/OrganizationReview'))
 app.use('/event-reviews', require('./routes/api/EventReview'))
 app.use('/org-activity', require('./routes/api/OrganizationActivity'))
-app.use(('/follower'),require('./routes/api/follower'))
+app.use(('/follower'), require('./routes/api/follower'))
 app.use('/post', require('./routes/api/Post'))
 app.use('/feed', require('./routes/api/Feed'))
 app.use('/chat', require('./routes/api/Chat'))
-app.use('/follow-suggestion',require('./routes/api/FollowerSuggestion'))
-// app.use('/chat', require('./routes/api/Chat'));
+app.use('/follow-suggestion', require('./routes/api/FollowerSuggestion'))
+app.use('/chat', require('./routes/api/Chat'));
 
 
-io.on('connection', (socket) => {
-    console.log('New client connected');
-    socket.on('connet_chart', async (data) => {
-        console.log("sendMessage",data);
-    });
-    HandleJoinChat(socket,io);
-    socket.on('disconnect', () => {
-        console.log('Client disconnected');
-    });
+io.on('connection', async(socket) => {
+  await HandleMakeConnection(socket,io,client)
+  await HandleEnterChat(socket,io,client)
+  await HandlePrivateMessage(socket,io,client)
+  await HandleDisConnect(socket,io,client)
 });
 
+
+app.get("/socket/io", auth, (req, res) => {
+    res.send({ id: req.user.id });
+});
 app.get("/", (req, res) => {
     res.send("Hello, World!");
 });
@@ -104,7 +126,7 @@ cron.schedule('0 1 * * *', async () => {
         const UserActivityController = require('./Controllers/application/UserActivity');
         const users = await require('./models/User').find({});
         let successCount = 0;
-        
+
         for (const user of users) {
             try {
                 await UserActivityController.updateUserActivityAfterEvent(user._id);
@@ -113,7 +135,7 @@ cron.schedule('0 1 * * *', async () => {
                 console.error(`Error recalculating activity for user ${user._id}:`, error);
             }
         }
-        
+
         console.log(`Successfully recalculated activity scores for ${successCount} users`);
     } catch (error) {
         console.error('Error running scheduled activity recalculation:', error);
@@ -127,12 +149,12 @@ cron.schedule('0 2 * * *', async () => {
         const User = require('./models/User');
         // Import the function needed for GitHub updates
         const { updateGitHubActivity } = require('./Controllers/application/UserActivity');
-        
+
         // Find users who have a GitHub username
         const users = await User.find({ 'socialLinks.github': { $exists: true, $ne: '' } });
-        
+
         let successCount = 0;
-        
+
         for (const user of users) {
             try {
                 const githubActivity = await updateGitHubActivity(user._id);
@@ -143,7 +165,7 @@ cron.schedule('0 2 * * *', async () => {
                 console.error(`Error updating GitHub activity for user ${user._id}:`, error);
             }
         }
-        
+
         console.log(`Successfully updated GitHub activity for ${successCount} users`);
     } catch (error) {
         console.error('Error running scheduled GitHub activity update:', error);

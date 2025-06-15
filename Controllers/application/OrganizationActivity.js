@@ -84,7 +84,6 @@ const calculateOrganizationScore = async (organizationId) => {
         
         return orgActivity;
     } catch (error) {
-        console.error('Error calculating organization scores:', error);
         throw error;
     }
 };
@@ -334,7 +333,6 @@ const addEventScore = async (organizationId, event) => {
         
         return orgActivity;
     } catch (error) {
-        console.error('Error adding event score:', error);
         throw error;
     }
 };
@@ -385,7 +383,6 @@ const addReviewScore = async (organizationId, review) => {
         
         return orgActivity;
     } catch (error) {
-        console.error('Error adding review score:', error);
         throw error;
     }
 };
@@ -464,7 +461,6 @@ const HandleGetOrganizationActivity = async (req, res) => {
             activity: orgActivity
         });
     } catch (error) {
-        console.error('Error getting organization activity:', error);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
@@ -489,7 +485,6 @@ const HandleRecalculateOrganizationActivity = async (req, res) => {
             activity: orgActivity
         });
     } catch (error) {
-        console.error('Error recalculating organization activity:', error);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
@@ -509,7 +504,6 @@ const HandleGetTopOrganizations = async (req, res) => {
         
         res.status(200).json(topOrganizations);
     } catch (error) {
-        console.error('Error getting top organizations:', error);
         res.status(500).json({ message: "Server error", error: error.message });
     }
 };
@@ -535,7 +529,6 @@ const scheduleDailyOrganizationUpdate = async () => {
         
         return { success: true, count };
     } catch (error) {
-        console.error('Error in daily organization update:', error);
         return { success: false, error: error.message };
     }
 };

@@ -24,11 +24,9 @@ const GetUserPosts = async (req, res) => {
             return res.status(200).json({ message: 'No posts found for this user', posts: [] });
         }
 
-        console.log(posts)
 
         return res.status(200).json({ posts });
     } catch (err) {
-        console.error('Error getting user posts:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -50,24 +48,19 @@ const HandlePandingPost = async (req, res) => {
             return res.status(404).json({ message: 'No pending posts found' });
         }
 
-        console.log("pendingPost",pendingPosts)
 
         res.status(200).json({ pendingPosts });
     }
     catch (err) {
-        console.log(err)
         res.status(500).json({ message: err.message })
     }
 }
 
 // Add a new post
 const HandleAddAchievementPost = async (req, res) => {
-    console.log("inside1");
     try {
-        console.log("started");
         const userId = req.user.id;
         const { title, description, content, isAchievementPosted, isAchivementPosted, achievementid } = req.body;
-        console.log("inside", req.body);
         
         if (!title || !description || !content) {
             return res.status(400).json({ message: 'All required fields must be provided' });
@@ -99,14 +92,12 @@ const HandleAddAchievementPost = async (req, res) => {
                              isAchivementPosted === "true";
         
         if (isAchievement) {
-            console.log("yes this is ac post");
             
             // Need to import mongoose at the top of the file
             if (!achievementid || !mongoose.Types.ObjectId.isValid(achievementid)) {
                 return res.status(400).json({ message: 'Valid Achievement ID is required for achievement posts' });
             }
             
-            console.log("inside2", achievementid);
             const userResume = await UserResume.findOne({
                 UserId: userId,
                 'Journey._id': new mongoose.Types.ObjectId(achievementid)
@@ -122,7 +113,6 @@ const HandleAddAchievementPost = async (req, res) => {
             }
         }
         
-        console.log("inside2 between 2 and 3", userId, isAchievement);
         
         // Create new post object
         const newPost = {
@@ -135,13 +125,11 @@ const HandleAddAchievementPost = async (req, res) => {
             isAchievementPosted: isAchievement // Ensure consistent boolean value
         };
 
-        console.log("new post inside infinity ", newPost);
         
         if (isAchievement) {
             newPost.achievementid = achievementid;
             newPost.isAchivementPosted = isAchievement; // Ensure consistent boolean value
         }
-        console.log("inside3", newPost);
         
         // Find or create the user's Post document
         let userPost = await Post.findOne({ userid: userId });
@@ -174,13 +162,11 @@ const HandleAddAchievementPost = async (req, res) => {
         return res.status(201).json({ message: 'Post added successfully', post: newPost });
         
     } catch (err) {
-        console.error('Error adding post:', err);
         return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
 };
 const HandleCheckUserLikeOrNot = async (req, res) => {
     try {
-        console.log("inside")
         const { postId } = req.params;
         const userId = req.user.id; // Assuming auth middleware sets user
 
@@ -202,7 +188,6 @@ const HandleCheckUserLikeOrNot = async (req, res) => {
         });
     }
     catch (err) {   
-        console.error('Error checking user like:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
@@ -237,7 +222,6 @@ const HandleUpdatePost = async (req, res) => {
             // Delete local file after upload
             await fs.unlink(req.file.path);
         }
-        console.log("inside3", post.image_path)
 
         // Update fields if provided
         if (title) post.title = title;
@@ -248,7 +232,6 @@ const HandleUpdatePost = async (req, res) => {
 
         return res.status(200).json({ message: 'Post updated successfully', post });
     } catch (err) {
-        console.error('Error updating post:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -275,7 +258,6 @@ const HandleDeletePost = async (req, res) => {
         if (post.image_path) {
             const publicId = post.image_path.split('/').pop().split('.')[0];
             if (publicId) {
-                console.log("Deleting post image from Cloudinary:", publicId);
                 await CloudinaryConfig.deleteFile(publicId);
             }
         }
@@ -286,7 +268,6 @@ const HandleDeletePost = async (req, res) => {
 
         return res.status(200).json({ message: 'Post deleted successfully' });
     } catch (err) {
-        console.error('Error deleting post:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -332,7 +313,6 @@ const HandleLikePost = async (req, res) => {
             likedBy
         });
     } catch (err) {
-        console.error('Error liking post:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -342,7 +322,6 @@ const HandleCommentPost = async (req, res) => {
     try {
         const { postId } = req.params;
         const { comment } = req.body;
-        console.log(comment)
         const userId = req.user.id; // Assuming auth middleware sets user
 
         if (!comment || comment.trim().length === 0) {
@@ -353,7 +332,6 @@ const HandleCommentPost = async (req, res) => {
         if (!postDoc) {
             return res.status(404).json({ message: 'Post not found' });
         }
-        console.log(postDoc)
 
         const post = postDoc.post.id(postId);
 
@@ -381,7 +359,6 @@ const HandleCommentPost = async (req, res) => {
             commentCount: post.comments.length
         });
     } catch (err) {
-        console.error('Error adding comment:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -424,7 +401,6 @@ const GetPostComments = async (req, res) => {
             commentCount: post.comments.length
         });
     } catch (err) {
-        console.error('Error getting post comments:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -452,7 +428,6 @@ const GetPostLikes = async (req, res) => {
             likeCount: post.likes.length
         });
     } catch (err) {
-        console.error('Error getting post likes:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -478,7 +453,6 @@ const HandlePostCount = async (req, res) => {
   
       return res.status(200).json({ PostCount });
     } catch (err) {
-      console.error('Error getting user posts:', err);
       return res.status(500).json({ message: 'Internal server error' });
     }
   }
@@ -487,14 +461,12 @@ const HandleGetUserPostById = async (req, res) => {
     try {
         const userId = req.body.userid; // Assuming auth middleware sets user
         const postId = req.params.postId;
-        console.log(userId, postId)
 
         const NewUser = await User.find({
             userid: userId
         });
 
         const newId = NewUser[0]._id.toString()
-        console.log(newId)
 
         // Find post document for the user
         const postDoc = await Post.findOne({ 
@@ -519,7 +491,6 @@ const HandleGetUserPostById = async (req, res) => {
             }
         });
     } catch (err) {
-        console.error('Error getting user post:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 }

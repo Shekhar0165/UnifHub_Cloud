@@ -84,7 +84,6 @@ const HandleAddEvent = async (req, res) => {
         // Update organization activity score
         try {
             await addEventScore(organization_id, newEvent);
-            console.log(`Organization activity score updated for new event ${newEvent._id}`);
         } catch (err) {
             console.error("Error updating organization activity score:", err);
         }
@@ -116,7 +115,6 @@ const HandleUpdateEvents = async (req, res) => {
             if (existingEvent.image_path) {
                 const publicId = existingEvent.image_path.split('/').pop().split('.')[0];
                 if (publicId) {
-                    console.log("Deleting old image from Cloudinary:", publicId);
                     await CloudinaryConfig.deleteFile(publicId);
                 }
             }
@@ -135,7 +133,6 @@ const HandleUpdateEvents = async (req, res) => {
 
         res.status(200).json({ message: "Event updated successfully", event: updatedEvent });
     } catch (error) {
-        console.error("Error updating event:", error);
         res.status(500).json({ message: "Error updating event", error: error.message });
     }
 };
@@ -164,10 +161,8 @@ const HandleDeleteEvents = async (req, res) => {
         if (checkedEvent.length === 0) {
             return res.status(404).json({ message: "Event not found for this organization" });
         }        if(checkedEvent[0].image_path) {
-            console.log("checkedEvent[0].image_path", checkedEvent[0].image_path);
             const publicId = checkedEvent[0].image_path.split('/').pop().split('.')[0];
             if (publicId) {
-                console.log("Deleting image from Cloudinary:", publicId);
                 await CloudinaryConfig.deleteFile(publicId);
             }
         }
@@ -179,7 +174,6 @@ const HandleDeleteEvents = async (req, res) => {
         const updatedEvents = await Event.find(); // Fetch remaining events
         return res.status(200).json(updatedEvents); // Return updated events list
     } catch (error) {
-        console.error("Error deleting event:", error);
         return res.status(500).json({ message: "Failed to delete event" });
     }
 };
@@ -218,7 +212,6 @@ const HandleGetOneEvent = async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(_id)) {
             return res.status(400).json({ message: "Invalid organization ID" });
         }
-        console.log("start")
 
         const events = await Event.find({_id})
         res.status(200).json(events);
@@ -281,7 +274,6 @@ const HandleRegisterForEvent = async (req, res) => {
 const HandleUPComingEventsForUser = async (req, res) => {
     try {
         const userId = req.params.userId;
-        console.log("userId", userId);
 
         if (!mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({ message: "Invalid user ID" });
@@ -306,7 +298,6 @@ const HandleUPComingEventsForUser = async (req, res) => {
             return res.status(404).json({ message: "No events found" });
         }
 
-        console.log("events", events);
 
         // Format event data for frontend
         const upcomingEvents = events.map(event => ({

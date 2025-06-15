@@ -12,7 +12,6 @@ const extractPublicId = (cloudinaryUrl) => {
 const HandleGetOrganization = async (req, res) => {
     try {
         const id = req.user.id; 
-        console.log('Organization ID:', id);
 
         const organization = await Organization.findById(id);
         
@@ -22,7 +21,6 @@ const HandleGetOrganization = async (req, res) => {
         
         res.status(200).json(organization);
     } catch (error) {
-        console.error('Error getting organization:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -39,7 +37,6 @@ const HandleGetOrganizationForUser = async (req, res) => {
         
         res.status(200).json(organization);
     } catch (error) {
-        console.error('Error getting organization:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -53,7 +50,6 @@ const HandleGetAllOrganization = async (req, res) => {
         
         res.status(200).json(organization);
     } catch (error) {
-        console.error('Error getting organization:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -64,7 +60,6 @@ const HandleGetUploadUrl = async (req, res) => {
         // This will set up and return a pre-signed URL
         return orgS3Handler.getUploadUrl(req, res);
     } catch (error) {
-        console.error('Error generating upload URL:', error);
         return res.status(500).json({ 
             success: false, 
             message: 'Server error', 
@@ -85,7 +80,6 @@ const HandleUpdateOrganization = async (req, res) => {
         } else {
             updates = { ...req.body };
         }
-        console.log(updates)
         
         // Get the current organization to check existing images
         const currentOrg = await Organization.findById(id);
@@ -99,7 +93,6 @@ const HandleUpdateOrganization = async (req, res) => {
                 if (currentOrg.profileImage) {
                     const publicId = extractPublicId(currentOrg.profileImage);
                     if (publicId) {
-                        console.log("Deleting old profile image from Cloudinary:", publicId);
                         await CloudinaryConfig.deleteFile(publicId);
                     }
                 }
@@ -117,7 +110,6 @@ const HandleUpdateOrganization = async (req, res) => {
                 if (currentOrg.coverImage) {
                     const publicId = extractPublicId(currentOrg.coverImage);
                     if (publicId) {
-                        console.log("Deleting old cover image from Cloudinary:", publicId);
                         await CloudinaryConfig.deleteFile(publicId);
                     }
                 }
@@ -145,7 +137,6 @@ const HandleUpdateOrganization = async (req, res) => {
         
         res.status(200).json({ message: 'Organization updated successfully', organization });
     } catch (error) {
-        console.error('Error updating organization:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -165,7 +156,6 @@ const HandleDeleteOrganization = async (req, res) => {
         if (organization.profileImage) {
             const publicId = extractPublicId(organization.profileImage);
             if (publicId) {
-                console.log("Deleting profile image from Cloudinary:", publicId);
                 await CloudinaryConfig.deleteFile(publicId);
             }
         }
@@ -174,7 +164,6 @@ const HandleDeleteOrganization = async (req, res) => {
         if (organization.coverImage) {
             const publicId = extractPublicId(organization.coverImage);
             if (publicId) {
-                console.log("Deleting cover image from Cloudinary:", publicId);
                 await CloudinaryConfig.deleteFile(publicId);
             }
         }
@@ -184,7 +173,6 @@ const HandleDeleteOrganization = async (req, res) => {
         
         res.status(200).json({ message: 'Organization deleted successfully' });
     } catch (error) {
-        console.error('Error deleting organization:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -220,7 +208,6 @@ const HandleAddUpcomingEvent = async (req, res) => {
             event: newEvent
         });
     } catch (error) {
-        console.error('Error adding upcoming event:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -262,7 +249,6 @@ const HandleAddEvent = async (req, res) => {
             event: newEvent
         });
     } catch (error) {
-        console.error('Error adding event:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -297,7 +283,6 @@ const HandleAddTeam = async (req, res) => {
             team: newTeam
         });
     } catch (error) {
-        console.error('Error adding team:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -326,7 +311,6 @@ const HandleUpdateSocialLinks = async (req, res) => {
             socialLinks: organization.socialLinks
         });
     } catch (error) {
-        console.error('Error updating social links:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -373,7 +357,6 @@ const HandleUpdateTeamMember = async (req, res) => {
             team: team
         });
     } catch (error) {
-        console.error('Error updating team member:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };

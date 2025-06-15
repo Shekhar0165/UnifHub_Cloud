@@ -106,7 +106,6 @@ const buildJourney = async (organizationId) => {
 
         updatedJourneys.push(journey);
     } catch (error) {
-        console.error('Error in BuidJourney:', error);
         return res.status(500).json({ success: false, message: 'Server error', error: error.message });
     }
 }
@@ -132,7 +131,6 @@ const getOrganizationJourney = async (req, res) => {
 
         return res.status(200).json({ success: true, data: journey });
     } catch (error) {
-        console.error('Error in getOrganizationJourney:', error);
         return res.status(500).json({ success: false, message: 'Server error', error: error.message });
     }
 };
@@ -250,7 +248,6 @@ const updateOrganizationJourney = async (req, res) => {
             count: updatedJourneys.length
         });
     } catch (error) {
-        console.error('Error in updateOrganizationJourney:', error);
         return res.status(500).json({ success: false, message: 'Server error', error: error.message });
     }
 };
@@ -258,7 +255,6 @@ const updateOrganizationJourney = async (req, res) => {
 // Schedule daily update function (to be called by a cron job)
 const scheduleDailyUpdate = async () => {
     try {
-        console.log('Starting daily organization journey update');
         const organizations = await Organization.find();
         let updateCount = 0;
 
@@ -365,10 +361,8 @@ const scheduleDailyUpdate = async () => {
             }
         }
 
-        console.log(`Completed daily organization journey update. Updated ${updateCount} organizations.`);
         return { success: true, count: updateCount };
     } catch (error) {
-        console.error('Error in scheduleDailyUpdate:', error);
         return { success: false, error: error.message };
     }
 };
@@ -429,7 +423,6 @@ const testAddJourneyMilestone = async (req, res) => {
             journey
         });
     } catch (error) {
-        console.error('Error in testAddJourneyMilestone:', error);
         return res.status(500).json({
             success: false,
             message: 'Server error',
@@ -441,7 +434,6 @@ const testAddJourneyMilestone = async (req, res) => {
 // Test function just to verify schema is working properly
 const testSchemaFix = async (req, res) => {
     try {
-        console.log("Testing schema fix...");
         const { organizationId } = req.params;
 
         // First check if the organization exists
@@ -483,7 +475,6 @@ const testSchemaFix = async (req, res) => {
             populatedJourney
         });
     } catch (error) {
-        console.error('Error in testSchemaFix:', error);
         return res.status(500).json({
             success: false,
             message: 'Server error',

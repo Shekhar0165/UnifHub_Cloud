@@ -74,7 +74,6 @@ const HandleAddFollowing = async (followerid, userid) => {
         };
 
     } catch (err) {
-        console.error(err.message);
         return { error: "Server error" };
     }
 };
@@ -116,7 +115,6 @@ const HandleRemoveFollowing = async (followerid, userid) => {
         return { message: "Successfully unfollowed" };
 
     } catch (err) {
-        console.error(err.message);
         return { error: "Server error" };
     }
 };
@@ -158,7 +156,6 @@ const HandleRemoveFollower = async (userid, followerid) => {
         return { message: "Follower removed successfully" };
 
     } catch (err) {
-        console.error(err.message);
         return { error: "Server error" };
     }
 };
@@ -230,7 +227,6 @@ const HandleAddFollower = async (req, res) => {
             data: userFollowerDoc 
         });
     } catch (err) {
-        console.error(err.message);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -255,7 +251,6 @@ const HandleUnfollow = async (req, res) => {
 
         return res.status(200).json({ message: "Successfully unfollowed", success: true });
     } catch (err) {
-        console.error(err.message);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -264,7 +259,6 @@ const HandleCheckIsFollowed = async (req, res) => {
     try {
         const userid = req.user.id;
         const followerid = req.params.userid; 
-        console.log(userid, followerid);
 
         // ✅ Validate IDs
         if (!mongoose.Types.ObjectId.isValid(userid) || !mongoose.Types.ObjectId.isValid(followerid)) {
@@ -292,7 +286,6 @@ const HandleCheckIsFollowed = async (req, res) => {
         }
     }
     catch (err) {
-        console.error(err.message);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -300,7 +293,6 @@ const HandleCheckIsFollowed = async (req, res) => {
 const HandleGetFollowerAndFollowingList = async (req, res) => {
     try {
         const id = req.params.userid;
-        console.log(id)
         if (!id) {
             return res.status(400).json({ message: "User ID is required" });
         }
@@ -316,15 +308,13 @@ const HandleGetFollowerAndFollowingList = async (req, res) => {
         const followerList = followers?.list || [];
         const followingList = following?.list || [];
 
-        console.log(followerList, followingList);
         return res.status(200).json({ 
             entityType,
             followerList, 
             followingList 
         });
 
-    } catch (err) {
-        console.error(err.message);
+    } catch (err) {W
         return res.status(500).json({ error: "Server error" });
     }
 };

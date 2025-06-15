@@ -206,7 +206,6 @@ const HandleGetAllEvents = async (req, res) => {
         const { id } = req.params;
         const { eventId } = req.body;
         const organizationId = id;
-        console.log(eventId)
         // Validate organization exists
         const organization = await Organization.findById(organizationId);
         if (!organization) {
@@ -294,7 +293,6 @@ const HandleGetAllEvents = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error in HandleGetAllEvents:", error);
         res.status(500).json({
             message: "Error retrieving events",
             error: error.message
@@ -485,7 +483,6 @@ const HandleUpdateEventMember = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error in HandleUpdateEventMember:", error);
         res.status(500).json({
             message: "Error updating event members",
             error: error.message
