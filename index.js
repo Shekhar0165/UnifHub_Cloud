@@ -12,6 +12,7 @@ const cron = require('node-cron');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const redis = require('redis');
+const {createClient} = require('redis');
 const { scheduleDailyUpdate } = require('./Controllers/application/OrganizationJourney');
 const {
   HandleMakeConnection,
@@ -30,13 +31,8 @@ dbconnect.connect()
     });
 
 
-const client = redis.createClient({
-    socket: {
-        host: "redis-15201.crce179.ap-south-1-1.ec2.redns.redis-cloud.com",
-        port: "15201",
-        tls: true,  
-    },
-    password: "fVuQE4z9bd9fmV4PvPyXQ5vO7AKAbMUZ",
+const client = createClient({
+    url: process.env.Redis_URL 
 });
 
 
