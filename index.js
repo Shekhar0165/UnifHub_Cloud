@@ -18,7 +18,7 @@ const {
   HandleMakeConnection,
   HandleEnterChat,
   HandlePrivateMessage,
-  HandleDisConnect
+  HandleDisconnect
 }
  = require('./Controllers/application/Chat');
 const auth = require('./middleware/auth')
@@ -32,7 +32,7 @@ dbconnect.connect()
 
 
 const client = createClient({
-    url: "redis://default:fVuQE4z9bd9fmV4PvPyXQ5vO7AKAbMUZ@redis-15201.crce179.ap-south-1-1.ec2.redns.redis-cloud.com:15201" 
+    url: process.env.Redis_URL 
 });
 
 
@@ -91,7 +91,7 @@ io.on('connection', async(socket) => {
   await HandleMakeConnection(socket,io,client)
   await HandleEnterChat(socket,io,client)
   await HandlePrivateMessage(socket,io,client)
-  await HandleDisConnect(socket,io,client)
+  await HandleDisconnect(socket,io,client)
 });
 
 

@@ -119,7 +119,7 @@ const getUserType = async (id) => {
   return null;
 };
 
-const HandleDisConnect = (socket,io,client)=>{
+const HandleDisconnect = (socket,io,client)=>{
   socket.on('user-disconnect', async (userid) => {
         console.log(`User disconnecting: ${userid}`);
         if (userid) {
@@ -144,7 +144,6 @@ const HandleDisConnect = (socket,io,client)=>{
 }
 
 const HandleGetProfileForChat = async (req, res) => {
-  console.log("start")
   try {
     const id = req.params.userid; // Authenticated user's ID'
     console.log(id)
@@ -192,7 +191,7 @@ module.exports = {
   HandleMakeConnection,
   HandleEnterChat,
   HandlePrivateMessage,
-  HandleDisConnect,
+  HandleDisconnect,
   HandleGetProfileForChat,
   handleGetOldChats
 }
