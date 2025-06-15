@@ -32,11 +32,11 @@ dbconnect.connect()
 
 const client = redis.createClient({
     socket: {
-        host: process.env.Redis_URL,
-        port: Number(process.env.Redis_PORT),
+        host: "redis-15201.crce179.ap-south-1-1.ec2.redns.redis-cloud.com",
+        port: "15201",
         tls: true,  
     },
-    password: process.env.Redis_Password,
+    password: "fVuQE4z9bd9fmV4PvPyXQ5vO7AKAbMUZ",
 });
 
 
