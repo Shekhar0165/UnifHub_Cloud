@@ -12,15 +12,15 @@ const cron = require('node-cron');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const redis = require('redis');
-const {createClient} = require('redis');
+const { createClient } = require('redis');
 const { scheduleDailyUpdate } = require('./Controllers/application/OrganizationJourney');
 const {
-  HandleMakeConnection,
-  HandleEnterChat,
-  HandlePrivateMessage,
-  HandleDisconnect
+    HandleMakeConnection,
+    HandleEnterChat,
+    HandlePrivateMessage,
+    HandleDisconnect
 }
- = require('./Controllers/application/Chat');
+    = require('./Controllers/application/Chat');
 const auth = require('./middleware/auth')
 
 dbconnect.connect()
@@ -30,15 +30,15 @@ dbconnect.connect()
         process.exit(1);
     });
 
-console.log(process.env.Redis_URL,process.env.Redis_PORT,process.env.Redis_Password)
+console.log(process.env.Redis_URL, process.env.Redis_PORT, process.env.Redis_Password)
 
 
 const client = createClient({
+    url: process.env.Redis_URL,
     socket: {
-    host: process.env.Redis_URL ,
-    port: process.env.Redis_PORT
-  },
-  password: process.env.Redis_Password
+        connectTimeout: 30000,
+        tls: process.env.Redis_URL?.includes('rediss://'), // Auto-detect SSL
+    }
 });
 
 
@@ -93,11 +93,11 @@ app.use('/follow-suggestion', require('./routes/api/FollowerSuggestion'))
 app.use('/chat', require('./routes/api/Chat'));
 
 
-io.on('connection', async(socket) => {
-  await HandleMakeConnection(socket,io,client)
-  await HandleEnterChat(socket,io,client)
-  await HandlePrivateMessage(socket,io,client)
-  await HandleDisconnect(socket,io,client)
+io.on('connection', async (socket) => {
+    await HandleMakeConnection(socket, io, client)
+    await HandleEnterChat(socket, io, client)
+    await HandlePrivateMessage(socket, io, client)
+    await HandleDisconnect(socket, io, client)
 });
 
 
