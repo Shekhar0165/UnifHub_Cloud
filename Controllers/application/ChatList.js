@@ -399,7 +399,6 @@ const HandleUpdateConversation = async (req, res) => {
 
 const HandleGetRealTimeChatList = async (socket, io, client) => {
   socket.on("check_user_status", async (userId) => {
-    console.log("Checking status for user:", userId);
     
     let isOnline = false;
     
