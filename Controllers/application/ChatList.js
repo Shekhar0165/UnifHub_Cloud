@@ -148,7 +148,6 @@ const HandleGetUserChatList = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error fetching chat list:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch chat list',
@@ -279,7 +278,6 @@ const HandleSearchChats = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error searching chats:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to search chats',
@@ -329,7 +327,6 @@ const HandleGetUnreadCount = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error getting unread count:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to get unread count',
@@ -386,7 +383,6 @@ const HandleUpdateConversation = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error updating conversation:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to update conversation',

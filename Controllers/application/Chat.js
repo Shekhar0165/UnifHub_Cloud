@@ -141,9 +141,8 @@ const HandlePrivateMessage = (socket, io, client) => {
       const recipientActiveChat = await client.hGet('user_active_chats', to);
       const isInActiveChat = recipientActiveChat === from;
 
-      
-
       io.to(to).emit('last-seen', messageData);
+
       if (isInActiveChat) {
         // User is actively viewing this chat
         io.to(to).emit('privateMessage', messageData);
@@ -157,6 +156,7 @@ const HandlePrivateMessage = (socket, io, client) => {
           }
         }, 1000);
       } else {
+        io.to(to).emit('message-count', messageData);
         // User is not actively viewing this chat
         io.to(to).emit('messageNotification', {
           ...messageData,
@@ -347,7 +347,6 @@ const getUserType = async (id) => {
 
 const HandleDisconnect = (socket, io, client) => {
   socket.on('user-disconnect', async (userid) => {
-    console.log(`User disconnecting: ${userid}`);
     if (userid) {
       await client.hDel('online_users', userid);
       await client.hDel('user_active_chats', userid);
@@ -356,13 +355,11 @@ const HandleDisconnect = (socket, io, client) => {
   });
 
   socket.on('disconnect', async () => {
-    console.log(`Socket disconnected: ${socket.id}`);
     const allUsers = await client.hGetAll('online_users');
     for (const [userId, socketId] of Object.entries(allUsers)) {
       if (socketId === socket.id) {
         await client.hDel('online_users', userId);
         await client.hDel('user_active_chats', userId);
-        console.log(`Removed disconnected user ${userId}`);
         break;
       }
     }
@@ -372,7 +369,6 @@ const HandleDisconnect = (socket, io, client) => {
 const HandleGetProfileForChat = async (req, res) => {
   try {
     const id = req.params.userid;
-    console.log(id)
 
     let user = await User.findOne({ userid: id }).select('-password -refreshToken -otp');
 
@@ -386,7 +382,7 @@ const HandleGetProfileForChat = async (req, res) => {
 };
 
 const handleGetOldChats = async (req, res) => {
-  const { userId, recipientId } = req.body;
+  const { userId, recipientId, page = 0, limit = 10 } = req.body;
 
   if (!userId || !recipientId) {
     return res.status(400).json({ error: "Missing userId or recipientId" });
@@ -399,28 +395,47 @@ const handleGetOldChats = async (req, res) => {
         { "participants.id": recipientId }
       ]
     });
-    
-    console.log(conversation);
-    
+
+
     if (!conversation) {
       return res.status(404).json({ error: "No conversation found" });
     }
 
-    // Also return conversation ID and unread count for this user
-    const userUnreadCount = conversation.unreadCount.find(uc => uc.userId.toString() === userId.toString());
+    // Calculate pagination
+    const totalMessages = conversation.messages.length;
+    const startIndex = Math.max(0, totalMessages - (page + 1) * limit);
+    const endIndex = totalMessages - page * limit;
     
+    // Get paginated messages (sorted by timestamp, newest first for pagination calculation)
+    // But we'll reverse the slice to maintain chronological order
+    const paginatedMessages = conversation.messages
+      .slice(startIndex, endIndex)
+      .reverse(); // Reverse to get chronological order (oldest first in the page)
+
+    // Check if there are more messages to load
+    const hasMore = startIndex > 0;
+
+    // Get user's unread count
+    const userUnreadCount = conversation.unreadCount.find(
+      uc => uc.userId.toString() === userId.toString()
+    );
+
     res.status(200).json({
-      messages: conversation.messages,
+      messages: paginatedMessages,
       conversationId: conversation._id,
       unreadCount: userUnreadCount ? userUnreadCount.count : 0,
-      lastMessage: conversation.lastMessage
+      lastMessage: conversation.lastMessage,
+      hasMore: hasMore,
+      totalMessages: totalMessages,
+      currentPage: page,
+      messagesInPage: paginatedMessages.length
     });
+
   } catch (error) {
     console.error("Error getting chats:", error);
     res.status(500).json({ error: "Failed to get messages" });
   }
 };
-
 // New endpoint to get conversation list with unread counts
 const handleGetConversationLastMessage = async (req, res) => {
   const userId = req.user.id;
