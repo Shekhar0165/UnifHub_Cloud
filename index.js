@@ -21,6 +21,7 @@ const {
     HandleDisconnect
 }
     = require('./Controllers/application/Chat');
+const {HandleGetRealTimeChatList} = require('./Controllers/application/ChatList')
 const auth = require('./middleware/auth')
 
 dbconnect.connect()
@@ -30,7 +31,6 @@ dbconnect.connect()
         process.exit(1);
     });
 
-console.log(process.env.Redis_URL, process.env.Redis_PORT, process.env.Redis_Password)
 
 
 const client = createClient({
@@ -47,6 +47,7 @@ client.connect()
     .catch(console.error);
 
 
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -54,6 +55,12 @@ const io = new Server(httpServer, {
         origin: corsOptions.origin,
         credentials: true
     }
+});
+
+
+app.use((req, res, next) => {
+  req.client = client;
+  next();
 });
 // Use credentials middleware before CORS
 app.use(credentialsMiddleware);
@@ -98,6 +105,7 @@ io.on('connection', async (socket) => {
     await HandleEnterChat(socket, io, client)
     await HandlePrivateMessage(socket, io, client)
     await HandleDisconnect(socket, io, client)
+    await HandleGetRealTimeChatList(socket, io, client)
 });
 
 
