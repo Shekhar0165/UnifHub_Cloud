@@ -6,7 +6,8 @@ const {
     HandleDeleteUser,
     HandleUpdatePassword,
     HandleSearchUser,
-    HandleGetForProfile
+    HandleGetForProfile,
+    HandleSearchALL
 } = require('../../Controllers/application/User');
 const auth = require('../../middleware/auth');
 const MulterConfig = require('../../config/Multer');
@@ -19,7 +20,8 @@ const ImageRender = new ImageRenderer('../public/User');
 // Protected routes - require authentication
 router.get('/one', auth, HandleGetUser);
 router.get('/profile/:userid', auth, HandleGetForProfile);
-router.get('/members/search', auth, HandleSearchUser);
+router.get('/members/search', auth, HandleSearchALL);
+router.get('/members/search/user', auth, HandleSearchUser);
 
 // Update user info with file upload
 router.put('/:id', auth, 

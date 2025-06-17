@@ -2,10 +2,34 @@ const Organization = require('../../models/Organizations');
 const CloudinaryConfig = require('../../config/CloudinaryConfig');
 const fs = require('fs').promises;
 
-// Helper function to extract public ID from Cloudinary URL
-const extractPublicId = (cloudinaryUrl) => {
-    if (!cloudinaryUrl) return null;
-    return cloudinaryUrl.split('/').pop().split('.')[0];
+// Helper function to extract public_id from Cloudinary URL
+const extractPublicIdFromUrl = (url) => {
+    if (!url) return null;
+    
+    try {
+        const urlParts = url.split('/');
+        const uploadIndex = urlParts.findIndex(part => part === 'upload');
+        
+        if (uploadIndex === -1) return null;
+        
+        // Get everything after 'upload' and version (if present)
+        let pathAfterUpload = urlParts.slice(uploadIndex + 1);
+        
+        // Remove version if present (starts with 'v' followed by numbers)
+        if (pathAfterUpload[0] && pathAfterUpload[0].match(/^v\d+$/)) {
+            pathAfterUpload = pathAfterUpload.slice(1);
+        }
+        
+        // Join the remaining parts to get the full public_id with folder
+        const fullPath = pathAfterUpload.join('/');
+        
+        // Remove file extension from the last part
+        const lastDotIndex = fullPath.lastIndexOf('.');
+        return lastDotIndex !== -1 ? fullPath.substring(0, lastDotIndex) : fullPath;
+    } catch (error) {
+        console.error('Error extracting public_id from URL:', error);
+        return null;
+    }
 };
 
 // Get an organization by ID
@@ -86,41 +110,81 @@ const HandleUpdateOrganization = async (req, res) => {
         if (!currentOrg) {
             return res.status(404).json({ message: 'Organization not found' });
         }
-          // Add file paths from Cloudinary if files were uploaded
+        
+        // Add file paths from Cloudinary if files were uploaded
         if (req.files) {
+            // Handle profile image upload
             if (req.files.profileImage) {
-                // Delete old profile image if it exists
-                if (currentOrg.profileImage) {
-                    const publicId = extractPublicId(currentOrg.profileImage);
-                    if (publicId) {
-                        await CloudinaryConfig.deleteFile(publicId);
+                try {
+                    // Delete old profile image if it exists
+                    if (currentOrg.profileImage) {
+                        const publicId = extractPublicIdFromUrl(currentOrg.profileImage);
+                        if (publicId) {
+                            try {
+                                await CloudinaryConfig.deleteFile(publicId);
+                                console.log(`Old profile image deleted from Cloudinary: ${publicId}`);
+                            } catch (deleteError) {
+                                console.error('Error deleting old profile image from Cloudinary:', deleteError);
+                                // Continue with upload even if delete fails
+                            }
+                        }
                     }
+                    
+                    // Upload new profile image to Cloudinary
+                    const profileResult = await CloudinaryConfig.uploadFile(req.files.profileImage[0], 'organizations');
+                    if (!profileResult.success) {
+                        throw new Error('Failed to upload profile image to Cloudinary');
+                    }
+                    updates.profileImage = profileResult.url;
+                    
+                    // Delete local file
+                    await fs.unlink(req.files.profileImage[0].path);
+                } catch (uploadError) {
+                    // Clean up local file if upload fails
+                    try {
+                        await fs.unlink(req.files.profileImage[0].path);
+                    } catch (unlinkError) {
+                        console.error('Error deleting local profile image file:', unlinkError);
+                    }
+                    throw uploadError;
                 }
-                // Upload new image to Cloudinary
-                const profileResult = await CloudinaryConfig.uploadFile(req.files.profileImage[0], 'organizations');
-                if (!profileResult.success) {
-                    throw new Error('Failed to upload profile image to Cloudinary');
-                }
-                updates.profileImage = profileResult.url;
-                // Delete local file
-                await fs.unlink(req.files.profileImage[0].path);
             }
+            
+            // Handle cover image upload
             if (req.files.coverImage) {
-                // Delete old cover image if it exists
-                if (currentOrg.coverImage) {
-                    const publicId = extractPublicId(currentOrg.coverImage);
-                    if (publicId) {
-                        await CloudinaryConfig.deleteFile(publicId);
+                try {
+                    // Delete old cover image if it exists
+                    if (currentOrg.coverImage) {
+                        const publicId = extractPublicIdFromUrl(currentOrg.coverImage);
+                        if (publicId) {
+                            try {
+                                await CloudinaryConfig.deleteFile(publicId);
+                                console.log(`Old cover image deleted from Cloudinary: ${publicId}`);
+                            } catch (deleteError) {
+                                console.error('Error deleting old cover image from Cloudinary:', deleteError);
+                                // Continue with upload even if delete fails
+                            }
+                        }
                     }
+                    
+                    // Upload new cover image to Cloudinary
+                    const coverResult = await CloudinaryConfig.uploadFile(req.files.coverImage[0], 'organizations');
+                    if (!coverResult.success) {
+                        throw new Error('Failed to upload cover image to Cloudinary');
+                    }
+                    updates.coverImage = coverResult.url;
+                    
+                    // Delete local file
+                    await fs.unlink(req.files.coverImage[0].path);
+                } catch (uploadError) {
+                    // Clean up local file if upload fails
+                    try {
+                        await fs.unlink(req.files.coverImage[0].path);
+                    } catch (unlinkError) {
+                        console.error('Error deleting local cover image file:', unlinkError);
+                    }
+                    throw uploadError;
                 }
-                // Upload new image to Cloudinary
-                const coverResult = await CloudinaryConfig.uploadFile(req.files.coverImage[0], 'organizations');
-                if (!coverResult.success) {
-                    throw new Error('Failed to upload cover image to Cloudinary');
-                }
-                updates.coverImage = coverResult.url;
-                // Delete local file
-                await fs.unlink(req.files.coverImage[0].path);
             }
         }
         
@@ -137,6 +201,7 @@ const HandleUpdateOrganization = async (req, res) => {
         
         res.status(200).json({ message: 'Organization updated successfully', organization });
     } catch (error) {
+        console.error('Error in HandleUpdateOrganization:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };
@@ -152,19 +217,32 @@ const HandleDeleteOrganization = async (req, res) => {
         if (!organization) {
             return res.status(404).json({ message: 'Organization not found' });
         }
-          // Delete profile image from Cloudinary if exists
+        
+        // Delete profile image from Cloudinary if exists
         if (organization.profileImage) {
-            const publicId = extractPublicId(organization.profileImage);
+            const publicId = extractPublicIdFromUrl(organization.profileImage);
             if (publicId) {
-                await CloudinaryConfig.deleteFile(publicId);
+                try {
+                    await CloudinaryConfig.deleteFile(publicId);
+                    console.log(`Profile image deleted from Cloudinary: ${publicId}`);
+                } catch (deleteError) {
+                    console.error('Error deleting profile image from Cloudinary:', deleteError);
+                    // Continue with organization deletion even if image deletion fails
+                }
             }
         }
         
         // Delete cover image from Cloudinary if exists
         if (organization.coverImage) {
-            const publicId = extractPublicId(organization.coverImage);
+            const publicId = extractPublicIdFromUrl(organization.coverImage);
             if (publicId) {
-                await CloudinaryConfig.deleteFile(publicId);
+                try {
+                    await CloudinaryConfig.deleteFile(publicId);
+                    console.log(`Cover image deleted from Cloudinary: ${publicId}`);
+                } catch (deleteError) {
+                    console.error('Error deleting cover image from Cloudinary:', deleteError);
+                    // Continue with organization deletion even if image deletion fails
+                }
             }
         }
         
@@ -173,6 +251,7 @@ const HandleDeleteOrganization = async (req, res) => {
         
         res.status(200).json({ message: 'Organization deleted successfully' });
     } catch (error) {
+        console.error('Error in HandleDeleteOrganization:', error);
         res.status(500).json({ message: 'Server error', error: error.message });
     }
 };

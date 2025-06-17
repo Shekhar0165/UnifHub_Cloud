@@ -37,7 +37,8 @@ const UserSchema = new mongoose.Schema({
         expiresAt: Date
     },
     profileImage: {
-        type: String
+        type: String,
+        default:"https://res.cloudinary.com/dt9kpgtli/image/upload/v1750145996/users/plwv3hcxswbdehv9wtbd.jpg"
     },
     // Rest of your schema remains the same...
     coverImage: {

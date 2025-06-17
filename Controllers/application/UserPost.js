@@ -5,6 +5,31 @@ const mongoose = require('mongoose');
 const CloudinaryConfig = require('../../config/CloudinaryConfig');
 const fs = require('fs').promises;
 
+// Helper function to extract public ID from Cloudinary URL
+const extractPublicIdFromUrl = (url) => {
+  if (!url) return null;
+  
+  try {
+    // Extract public ID from Cloudinary URL
+    // Example URL: https://res.cloudinary.com/your-cloud/image/upload/v1234567890/posts/filename.jpg
+    const urlParts = url.split('/');
+    const uploadIndex = urlParts.findIndex(part => part === 'upload');
+    
+    if (uploadIndex !== -1 && uploadIndex + 2 < urlParts.length) {
+      // Get everything after 'upload/v{version}/'
+      const pathParts = urlParts.slice(uploadIndex + 2);
+      const fullPath = pathParts.join('/');
+      // Remove file extension
+      return fullPath.replace(/\.[^/.]+$/, '');
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error extracting public ID from URL:', error);
+    return null;
+  }
+};
+
 // Get all posts for a user
 const GetUserPosts = async (req, res) => {
     try {
@@ -23,7 +48,6 @@ const GetUserPosts = async (req, res) => {
         if (!posts) {
             return res.status(200).json({ message: 'No posts found for this user', posts: [] });
         }
-
 
         return res.status(200).json({ posts });
     } catch (err) {
@@ -47,7 +71,6 @@ const HandlePandingPost = async (req, res) => {
         if (pendingPosts.length === 0) {
             return res.status(404).json({ message: 'No pending posts found' });
         }
-
 
         res.status(200).json({ pendingPosts });
     }
@@ -74,7 +97,11 @@ const HandleAddAchievementPost = async (req, res) => {
             }
             image_path = result.url;
             // Delete local file after upload
-            await fs.unlink(req.file.path);
+            try {
+                await fs.unlink(req.file.path);
+            } catch (unlinkError) {
+                console.error('Error deleting local file:', unlinkError);
+            }
         }
         
         // Check if user exists
@@ -162,9 +189,11 @@ const HandleAddAchievementPost = async (req, res) => {
         return res.status(201).json({ message: 'Post added successfully', post: newPost });
         
     } catch (err) {
+        console.error('Error adding post:', err);
         return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
 };
+
 const HandleCheckUserLikeOrNot = async (req, res) => {
     try {
         const { postId } = req.params;
@@ -210,8 +239,24 @@ const HandleUpdatePost = async (req, res) => {
         }
 
         // Find the specific post
-        const post = postDoc.post.id(postId);        // Check if a new image was uploaded
+        const post = postDoc.post.id(postId);
+
+        // Check if a new image was uploaded
         if (req.file) {
+            // Delete old image from Cloudinary if it exists
+            if (post.image_path) {
+                const publicId = extractPublicIdFromUrl(post.image_path);
+                if (publicId) {
+                    try {
+                        await CloudinaryConfig.deleteFile(publicId);
+                        console.log('Old post image deleted successfully:', publicId);
+                    } catch (deleteError) {
+                        console.error('Error deleting old post image:', deleteError);
+                        // Continue with upload even if deletion fails
+                    }
+                }
+            }
+
             // Upload new image to Cloudinary
             const result = await CloudinaryConfig.uploadFile(req.file, 'posts');
             if (!result.success) {
@@ -219,8 +264,13 @@ const HandleUpdatePost = async (req, res) => {
             }
             // Set the new image path
             post.image_path = result.url;
+            
             // Delete local file after upload
-            await fs.unlink(req.file.path);
+            try {
+                await fs.unlink(req.file.path);
+            } catch (unlinkError) {
+                console.error('Error deleting local file:', unlinkError);
+            }
         }
 
         // Update fields if provided
@@ -232,7 +282,8 @@ const HandleUpdatePost = async (req, res) => {
 
         return res.status(200).json({ message: 'Post updated successfully', post });
     } catch (err) {
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error('Error updating post:', err);
+        return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
 };
 
@@ -254,11 +305,18 @@ const HandleDeletePost = async (req, res) => {
 
         // Find the specific post to delete its image first
         const post = postDoc.post.id(postId);
-          // Delete the image from Cloudinary if it exists
+        
+        // Delete the image from Cloudinary if it exists
         if (post.image_path) {
-            const publicId = post.image_path.split('/').pop().split('.')[0];
+            const publicId = extractPublicIdFromUrl(post.image_path);
             if (publicId) {
-                await CloudinaryConfig.deleteFile(publicId);
+                try {
+                    await CloudinaryConfig.deleteFile(publicId);
+                    console.log('Post image deleted successfully from Cloudinary:', publicId);
+                } catch (deleteError) {
+                    console.error('Error deleting post image from Cloudinary:', deleteError);
+                    // Continue with post deletion even if image deletion fails
+                }
             }
         }
 
@@ -266,9 +324,13 @@ const HandleDeletePost = async (req, res) => {
         postDoc.post.pull({ _id: postId });
         await postDoc.save();
 
-        return res.status(200).json({ message: 'Post deleted successfully' });
+        return res.status(200).json({ 
+            message: 'Post deleted successfully',
+            deletedImage: !!post.image_path
+        });
     } catch (err) {
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error('Error deleting post:', err);
+        return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
 };
 

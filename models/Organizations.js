@@ -16,7 +16,10 @@ const OrganizationSchema = new mongoose.Schema({
     location: { type: String, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     phone: { type: String, trim: true },
-    profileImage: { type: String, trim: true },
+    profileImage: {
+        type: String,
+        default:"https://res.cloudinary.com/dt9kpgtli/image/upload/v1750145996/users/plwv3hcxswbdehv9wtbd.jpg"
+    },
     coverImage: { type: String, trim: true },
     rating: { 
         average: { type: Number, default: 0 },
