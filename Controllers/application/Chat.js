@@ -410,7 +410,6 @@ const handleGetOldChats = async (req, res) => {
     // But we'll reverse the slice to maintain chronological order
     const paginatedMessages = conversation.messages
       .slice(startIndex, endIndex)
-      .reverse(); // Reverse to get chronological order (oldest first in the page)
 
     // Check if there are more messages to load
     const hasMore = startIndex > 0;
@@ -419,6 +418,7 @@ const handleGetOldChats = async (req, res) => {
     const userUnreadCount = conversation.unreadCount.find(
       uc => uc.userId.toString() === userId.toString()
     );
+    console.log(userId,paginatedMessages)
 
     res.status(200).json({
       messages: paginatedMessages,
