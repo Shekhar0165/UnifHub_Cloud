@@ -29,6 +29,7 @@ class Otp {
             this.otpCreatedAt = new Date();
             console.log(this.otp)
             const emailText = this.Text.replace("{otp}", this.otp);
+            console.log(this.otp)
             await this.mail.SendMail(this.UserEmail, this.SenderMail, this.Subject, emailText);
 
         } catch (err) {

@@ -5,9 +5,9 @@ const auth = require('../../middleware/auth');
 
 
 // Protected routes - require authentication
-router.post('/add', HandleAddNewTeam);
-router.get('/:id', HandleGetTeam);
-router.put('/update/:id', HandleUpdateTeam);
+router.post('/add',auth, HandleAddNewTeam);
+router.get('/:id',auth, HandleGetTeam);
+router.put('/update/:id',auth, HandleUpdateTeam);
 router.delete('/delete',auth,HandleDeleteTeam)
 
 module.exports = router;

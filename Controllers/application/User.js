@@ -53,7 +53,12 @@ const HandleGetForProfile = async (req, res) => {
     const id = req.params.userid; // Authenticated user's ID'
 
     // Correct query to find user by ID
-    const user = await User.findOne({ userid: id }).select('-password -refreshToken -otp');
+    let user = await User.findOne({ userid: id }).select('-password -refreshToken -otp');
+
+    
+    if (!user) {
+      user = await Organization.findOne({ userid: id }).select('-password -refreshToken -otp')
+    }
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });

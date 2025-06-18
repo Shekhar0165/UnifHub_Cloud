@@ -22,6 +22,7 @@ const {
 }
     = require('./Controllers/application/Chat');
 const {HandleGetRealTimeChatList} = require('./Controllers/application/ChatList')
+const {HandlePushNotification} = require('./Controllers/application/Notification')
 const auth = require('./middleware/auth')
 
 dbconnect.connect()
@@ -98,6 +99,7 @@ app.use('/feed', require('./routes/api/Feed'))
 app.use('/chat', require('./routes/api/Chat'))
 app.use('/follow-suggestion', require('./routes/api/FollowerSuggestion'))
 app.use('/chat', require('./routes/api/Chat'));
+app.use('/notification', require('./routes/api/Notification'));
 
 
 io.on('connection', async (socket) => {
@@ -106,6 +108,7 @@ io.on('connection', async (socket) => {
     await HandlePrivateMessage(socket, io, client)
     await HandleDisconnect(socket, io, client)
     await HandleGetRealTimeChatList(socket, io, client)
+    await HandlePushNotification(socket, io, client)
 });
 
 

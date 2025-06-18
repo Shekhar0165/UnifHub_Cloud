@@ -4,6 +4,8 @@ const Event = require('../../models/Event');
 const Participants = require('../../models/Participants');
 const UserResume = require('../../models/UserResume');
 const Team = require('../../models/Teams');
+const { HandleSendNotificationOnPlatfrom } = require('./Notification');
+
 
 const HandleFindEvents = async (id, res) => {
     try {
@@ -66,6 +68,12 @@ const HandleCheckEventsCompleted = async (userid) => {
             return; // No events found for this user
         }
         
+        // Get user info for notifications
+        const user = await User.findById(userid);
+        if (!user) {
+            return;
+        }
+        
         // Find or create user resume
         let userResume = await UserResume.findOne({ UserId: userid });
         if (!userResume) {
@@ -75,7 +83,6 @@ const HandleCheckEventsCompleted = async (userid) => {
             });
             
             // Add first login achievement if this is a new resume
-            const user = await User.findById(userid);
             if (user) {
                 userResume.Journey.push({
                     title: "Joined UnifHub",
@@ -84,6 +91,19 @@ const HandleCheckEventsCompleted = async (userid) => {
                     metrics: { achievementType: 'registration' },
                     isPosted: false // Mark as posted
                 });
+
+                // Send notification for joining UnifHub
+                const joinNotification = {
+                    type: 'congratulation',
+                    title: `Welcome to UnifHub!`,
+                    message: `Congratulations ${user.name}! You've successfully joined UnifHub and started your journey.`,
+                    time: new Date(),
+                    read: false,
+                    avatar: '🎉',
+                    icon: "PartyPopper",
+                    link: `/profile/${user.userid}`
+                };
+                await HandleSendNotificationOnPlatfrom(joinNotification, user);
             }
         }
         
@@ -110,16 +130,28 @@ const HandleCheckEventsCompleted = async (userid) => {
                 // Create achievement description based on position
                 let achievementTitle = `Participated in ${event.eventName}`;
                 let achievementDescription = `Participated in ${event.eventName} organized by ${orgName}.`;
+                let notificationTitle = `Event Participation Achievement!`;
+                let notificationMessage = `Congratulations! You participated in ${event.eventName} organized by ${orgName}.`;
+                let notificationIcon = "🎯";
                 
                 if (position === 1) {
                     achievementTitle = `Won first place in ${event.eventName}`;
                     achievementDescription = `Won first place in ${event.eventName} organized by ${orgName}.`;
+                    notificationTitle = `🥇 First Place Winner!`;
+                    notificationMessage = `Outstanding! You won first place in ${event.eventName} organized by ${orgName}!`;
+                    notificationIcon = "🏆";
                 } else if (position === 2) {
                     achievementTitle = `Won second place in ${event.eventName}`;
                     achievementDescription = `Won second place in ${event.eventName} organized by ${orgName}.`;
+                    notificationTitle = `🥈 Second Place Winner!`;
+                    notificationMessage = `Excellent! You won second place in ${event.eventName} organized by ${orgName}!`;
+                    notificationIcon = "🥈";
                 } else if (position === 3) {
                     achievementTitle = `Won third place in ${event.eventName}`;
                     achievementDescription = `Won third place in ${event.eventName} organized by ${orgName}.`;
+                    notificationTitle = `🥉 Third Place Winner!`;
+                    notificationMessage = `Great job! You won third place in ${event.eventName} organized by ${orgName}!`;
+                    notificationIcon = "🥉";
                 }
                 
                 // Add to user's journey
@@ -133,6 +165,19 @@ const HandleCheckEventsCompleted = async (userid) => {
                         position: position
                     }
                 });
+
+                // Send notification to user
+                const achievementNotification = {
+                    type: 'congratulation',
+                    title: notificationTitle,
+                    message: notificationMessage,
+                    time: new Date(),
+                    read: false,
+                    avatar: notificationIcon,
+                    icon: "PartyPopper",
+                    link: organization ? `/organization/${organization.userid}` : `/profile/${user.userid}`
+                };
+                await HandleSendNotificationOnPlatfrom(achievementNotification, user);
             }
         }
         
@@ -156,6 +201,10 @@ const checkUserTeamMembership = async (userid, userResume) => {
         });
         
         if (!teams.length) return;
+
+        // Get user info for notifications
+        const user = await User.findById(userid);
+        if (!user) return;
         
         for (const team of teams) {
             // Check if this team membership is already in the resume
@@ -199,6 +248,21 @@ const checkUserTeamMembership = async (userid, userResume) => {
                         role: role
                     }
                 });
+
+                // Send notification to user
+                const teamNotification = {
+                    type: 'congratulation',
+                    title: role === "leader" ? `You're now leading ${team.teamName}!` : `Welcome to ${team.teamName}!`,
+                    message: role === "leader" 
+                        ? `Congratulations! You have been assigned as the team leader of ${team.teamName} at ${orgName}.`
+                        : `You have been added to the team ${team.teamName} at ${orgName}.`,
+                    time: new Date(),
+                    read: false,
+                    avatar: role === "leader" ? '👑' : '👥',
+                    icon: "PartyPopper",
+                    link: organization ? `/organization/${organization.userid}` : `/profile/${user.userid}`
+                };
+                await HandleSendNotificationOnPlatfrom(teamNotification, user);
             }
         }
         
@@ -214,13 +278,15 @@ const generateUserResume = async (userid) => {
         // Find or create user resume
         let userResume = await UserResume.findOne({ UserId: userid });
         if (!userResume) {
+            const user = await User.findById(userid);
+            if (!user) return null;
+
             userResume = new UserResume({
                 UserId: userid,
                 Journey: []
             });
             
             // Add first login achievement
-            const user = await User.findById(userid);
             if (user) {
                 userResume.Journey.push({
                     title: "Joined UnifHub",
@@ -229,6 +295,19 @@ const generateUserResume = async (userid) => {
                     metrics: { achievementType: 'registration' },
                     isPosted: false // Mark as posted
                 });
+
+                // Send notification for joining UnifHub
+                const joinNotification = {
+                    type: 'congratulation',
+                    title: `Welcome to UnifHub!`,
+                    message: `Congratulations ${user.name}! You've successfully joined UnifHub and started your journey.`,
+                    time: new Date(),
+                    read: false,
+                    avatar: '🎉',
+                    icon: "PartyPopper",
+                    link: `/profile/${user.userid}`
+                };
+                await HandleSendNotificationOnPlatfrom(joinNotification, user);
             }
             
             await userResume.save();
@@ -327,6 +406,12 @@ const addUserAchievement = async (userId, achievement) => {
             });
         }
         
+        // Get user info for notification
+        const user = await User.findById(userId);
+        if (!user) {
+            return null;
+        }
+        
         // Ensure we have a valid date
         const achievementDate = achievement.date || new Date();
         
@@ -341,6 +426,20 @@ const addUserAchievement = async (userId, achievement) => {
         
         // Save changes
         await userResume.save();
+
+        // Send notification for the new achievement
+        const achievementNotification = {
+            type: 'congratulation',
+            title: `New Achievement Unlocked!`,
+            message: `Congratulations! You've earned: ${achievement.title}`,
+            time: new Date(),
+            read: false,
+            avatar: '🏆',
+            icon: "PartyPopper",
+            link: `/user/${user.userid}`
+        };
+        await HandleSendNotificationOnPlatfrom(achievementNotification, user);
+        
         return userResume;
     } catch (err) {
         return null;
@@ -355,6 +454,12 @@ const trackFirstEventCompletion = async (userId, eventId, eventName, organizatio
         if (!userResume) {
             return null; // Resume doesn't exist yet
         }
+
+        // Get user info for notification
+        const user = await User.findById(userId);
+        if (!user) {
+            return null;
+        }
         
         // Check if user already has a "First Event Completed" achievement
         const hasFirstEventAchievement = userResume.Journey.some(
@@ -362,7 +467,7 @@ const trackFirstEventCompletion = async (userId, eventId, eventName, organizatio
         );
         
         if (!hasFirstEventAchievement) {
-            return await addUserAchievement(userId, {
+            const newAchievement = await addUserAchievement(userId, {
                 title: "First Event Completed",
                 description: `Completed first event "${eventName}" organized by ${organizationName}.`,
                 date: new Date(), // Explicitly provide a date
@@ -371,6 +476,21 @@ const trackFirstEventCompletion = async (userId, eventId, eventName, organizatio
                     eventId
                 }
             });
+
+            // Send special notification for first event completion
+            const firstEventNotification = {
+                type: 'congratulation',
+                title: `🎉 First Event Completed!`,
+                message: `Milestone achieved! You've completed your first event "${eventName}" organized by ${organizationName}.`,
+                time: new Date(),
+                read: false,
+                avatar: '🎯',
+                icon: "PartyPopper",
+                link: `/profile/${user.userid}`
+            };
+            await HandleSendNotificationOnPlatfrom(firstEventNotification, user);
+
+            return newAchievement;
         }
         
         return userResume;

@@ -4,7 +4,6 @@ const PostSchema = new mongoose.Schema({
     post: [{
         title: {
             type: String,
-            required: true
         },
         description: {
             type: String,
@@ -16,7 +15,6 @@ const PostSchema = new mongoose.Schema({
         },
         image_path: {
             type: String,
-            required: true
         },
         likes: [{
             type: mongoose.Schema.Types.ObjectId,

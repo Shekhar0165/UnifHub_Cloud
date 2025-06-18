@@ -5,6 +5,114 @@ const Event = require('../../models/Event');
 const Team = require('../../models/Teams');
 const Participants = require('../../models/Participants');
 
+// Import or define the notification function
+const HandleSendNotificationOnPlatfrom = async (notificationItem, user) => {
+    const recipientActiveChat = await globalClient.hGet('online_users', user._id.toString());
+    let notificationDoc = await Notification.findOne({ userid: user._id });
+
+    if (!notificationDoc) {
+        // Create a new notification document
+        notificationDoc = new Notification({
+            userid: user._id.toString(),
+            notification: [notificationItem]
+        });
+
+        const savedDoc = await notificationDoc.save();
+        const savedNotificationId = savedDoc.notification[0]._id;
+
+        // Emit with _id
+        const notificationWithId = {
+            ...notificationItem,
+            _id: savedNotificationId
+        };
+
+        if (recipientActiveChat) {
+            globalIo.to(recipientActiveChat).emit("Notification", notificationWithId);
+        }
+        console.log("Notification", notificationWithId)
+
+    } else {
+        // Push into existing array
+        notificationDoc.notification.push(notificationItem);
+        const savedDoc = await notificationDoc.save();
+
+        const lastIndex = savedDoc.notification.length - 1;
+        const savedNotificationId = savedDoc.notification[lastIndex]._id;
+
+        console.log(savedNotificationId)
+
+        // Emit with _id
+        const notificationWithId = {
+            ...notificationItem,
+            _id: savedNotificationId
+        };
+
+        if (recipientActiveChat) {
+            globalIo.to(recipientActiveChat).emit("Notification", notificationWithId);
+        }
+        console.log("Notification", notificationWithId)
+    }
+};
+
+// Helper function to send organization achievement notifications
+const sendOrganizationAchievementNotification = async (orgId, achievementTitle, achievementDescription, achievementType = 'milestone') => {
+    try {
+        // Find the organization
+        const org = await Organization.findById(orgId);
+        if (!org) return;
+
+        // Find the organization owner/admin
+        const orgOwner = await User.findById(org.createdBy || org.owner || org.admin);
+        if (!orgOwner) return;
+
+        // Create notification based on achievement type
+        let notificationTitle = `🏆 Organization Achievement!`;
+        let notificationIcon = '🏆';
+        let notificationAvatar = '🎯';
+
+        if (achievementType === 'event_milestone') {
+            if (achievementTitle.includes('First Event')) {
+                notificationTitle = `🎉 First Event Created!`;
+                notificationIcon = '🎯';
+                notificationAvatar = '🎪';
+            } else if (achievementTitle.includes('Events Milestone')) {
+                notificationTitle = `🎪 Event Milestone Achieved!`;
+                notificationIcon = '🎪';
+                notificationAvatar = '🎯';
+            }
+        } else if (achievementType === 'participant_milestone') {
+            if (achievementTitle.includes('First Team')) {
+                notificationTitle = `👥 First Team Created!`;
+                notificationIcon = '👥';
+                notificationAvatar = '🤝';
+            } else if (achievementTitle.includes('Participants Milestone')) {
+                notificationTitle = `🎉 Participant Milestone!`;
+                notificationIcon = '🎉';
+                notificationAvatar = '👥';
+            }
+        } else if (achievementType === 'registration') {
+            notificationTitle = `🎉 Welcome to UnifHub!`;
+            notificationIcon = '🎉';
+            notificationAvatar = '🌟';
+        }
+
+        const orgNotification = {
+            type: 'congratulation',
+            title: notificationTitle,
+            message: `${org.name}: ${achievementDescription}`,
+            time: new Date(),
+            read: false,
+            avatar: notificationAvatar,
+            icon: "PartyPopper",
+            link: `/organization/${org.userid || org._id}`
+        };
+
+        await HandleSendNotificationOnPlatfrom(orgNotification, orgOwner);
+    } catch (error) {
+        console.error('Error sending organization achievement notification:', error);
+    }
+};
+
 const buildJourney = async (organizationId) => {
     try {
         // Find the organization first
@@ -28,6 +136,14 @@ const buildJourney = async (organizationId) => {
                 }]
             });
             await journey.save();
+
+            // Send notification for organization creation
+            await sendOrganizationAchievementNotification(
+                organizationId,
+                'Organization Created',
+                `${org.name} has successfully joined our platform!`,
+                'registration'
+            );
         }
         
         // Check for first event creation milestone
@@ -35,10 +151,13 @@ const buildJourney = async (organizationId) => {
         const firstEvent = events[0];
 
         if (firstEvent && !journey.Journey.some(j => j.achievementType === 'event_milestone' && j.title === 'First Event Created')) {
+            const achievementTitle = 'First Event Created';
+            const achievementDescription = `${org.name} created their first event: ${firstEvent.eventName}`;
+            
             journey.Journey.push({
-                title: 'First Event Created',
+                title: achievementTitle,
                 Date: firstEvent.createdAt,
-                description: `${org.name} created their first event: ${firstEvent.eventName}`,
+                description: achievementDescription,
                 achievementType: 'event_milestone',
                 metrics: {
                     eventCount: 1,
@@ -46,6 +165,14 @@ const buildJourney = async (organizationId) => {
                 }
             });
             await journey.save();
+
+            // Send notification for first event creation
+            await sendOrganizationAchievementNotification(
+                organizationId,
+                achievementTitle,
+                achievementDescription,
+                'event_milestone'
+            );
         }
 
         // Check for event count milestones (5, 10, 25, 50, 100)
@@ -54,16 +181,27 @@ const buildJourney = async (organizationId) => {
 
         for (const milestone of eventMilestones) {
             if (eventCount >= milestone && !journey.Journey.some(j => j.title === `${milestone} Events Milestone`)) {
+                const achievementTitle = `${milestone} Events Milestone`;
+                const achievementDescription = `${org.name} has organized ${milestone} events!`;
+                
                 journey.Journey.push({
-                    title: `${milestone} Events Milestone`,
+                    title: achievementTitle,
                     Date: new Date(),
-                    description: `${org.name} has organized ${milestone} events!`,
+                    description: achievementDescription,
                     achievementType: 'event_milestone',
                     metrics: {
                         eventCount: milestone
                     }
                 });
                 await journey.save();
+
+                // Send notification for event milestone
+                await sendOrganizationAchievementNotification(
+                    organizationId,
+                    achievementTitle,
+                    achievementDescription,
+                    'event_milestone'
+                );
                 break; // Only add the most recent milestone
             }
         }
@@ -73,14 +211,25 @@ const buildJourney = async (organizationId) => {
 
         if (teams.length > 0 && !journey.Journey.some(j => j.title === 'First Team Created')) {
             const firstTeam = teams.sort((a, b) => a.createdAt - b.createdAt)[0];
+            const achievementTitle = 'First Team Created';
+            const achievementDescription = `${org.name} created their first team: ${firstTeam.teamName}`;
+            
             journey.Journey.push({
-                title: 'First Team Created',
+                title: achievementTitle,
                 Date: firstTeam.createdAt,
-                description: `${org.name} created their first team: ${firstTeam.teamName}`,
+                description: achievementDescription,
                 achievementType: 'participant_milestone',
                 metrics: {}
             });
             await journey.save();
+
+            // Send notification for first team creation
+            await sendOrganizationAchievementNotification(
+                organizationId,
+                achievementTitle,
+                achievementDescription,
+                'participant_milestone'
+            );
         }
 
         // Check for participant milestones
@@ -90,23 +239,35 @@ const buildJourney = async (organizationId) => {
 
         for (const milestone of participantMilestones) {
             if (participantCount >= milestone && !journey.Journey.some(j => j.title === `${milestone} Participants Milestone`)) {
+                const achievementTitle = `${milestone} Participants Milestone`;
+                const achievementDescription = `${org.name} has reached ${milestone} participants across all events!`;
+                
                 journey.Journey.push({
-                    title: `${milestone} Participants Milestone`,
+                    title: achievementTitle,
                     Date: new Date(),
-                    description: `${org.name} has reached ${milestone} participants across all events!`,
+                    description: achievementDescription,
                     achievementType: 'participant_milestone',
                     metrics: {
                         totalParticipants: milestone
                     }
                 });
                 await journey.save();
+
+                // Send notification for participant milestone
+                await sendOrganizationAchievementNotification(
+                    organizationId,
+                    achievementTitle,
+                    achievementDescription,
+                    'participant_milestone'
+                );
                 break; // Only add the most recent milestone
             }
         }
 
         updatedJourneys.push(journey);
     } catch (error) {
-        return res.status(500).json({ success: false, message: 'Server error', error: error.message });
+        console.error('Error in buildJourney:', error);
+        throw error;
     }
 }
 
@@ -135,8 +296,6 @@ const getOrganizationJourney = async (req, res) => {
     }
 };
 
-
-
 // Update organization journey for all organizations (to be run daily)
 const updateOrganizationJourney = async (req, res) => {
     try {
@@ -162,6 +321,14 @@ const updateOrganizationJourney = async (req, res) => {
                 });
                 await journey.save();
                 updatedJourneys.push(journey);
+
+                // Send notification for organization creation
+                await sendOrganizationAchievementNotification(
+                    org._id,
+                    'Organization Created',
+                    `${org.name} has successfully joined our platform!`,
+                    'registration'
+                );
                 continue;
             }
 
@@ -170,10 +337,13 @@ const updateOrganizationJourney = async (req, res) => {
             const firstEvent = events[0];
 
             if (firstEvent && !journey.Journey.some(j => j.achievementType === 'event_milestone' && j.title === 'First Event Created')) {
+                const achievementTitle = 'First Event Created';
+                const achievementDescription = `${org.name} created their first event: ${firstEvent.eventName}`;
+                
                 journey.Journey.push({
-                    title: 'First Event Created',
+                    title: achievementTitle,
                     Date: firstEvent.createdAt,
-                    description: `${org.name} created their first event: ${firstEvent.eventName}`,
+                    description: achievementDescription,
                     achievementType: 'event_milestone',
                     metrics: {
                         eventCount: 1,
@@ -181,6 +351,14 @@ const updateOrganizationJourney = async (req, res) => {
                     }
                 });
                 await journey.save();
+
+                // Send notification for first event creation
+                await sendOrganizationAchievementNotification(
+                    org._id,
+                    achievementTitle,
+                    achievementDescription,
+                    'event_milestone'
+                );
             }
 
             // Check for event count milestones (5, 10, 25, 50, 100)
@@ -189,16 +367,27 @@ const updateOrganizationJourney = async (req, res) => {
 
             for (const milestone of eventMilestones) {
                 if (eventCount >= milestone && !journey.Journey.some(j => j.title === `${milestone} Events Milestone`)) {
+                    const achievementTitle = `${milestone} Events Milestone`;
+                    const achievementDescription = `${org.name} has organized ${milestone} events!`;
+                    
                     journey.Journey.push({
-                        title: `${milestone} Events Milestone`,
+                        title: achievementTitle,
                         Date: new Date(),
-                        description: `${org.name} has organized ${milestone} events!`,
+                        description: achievementDescription,
                         achievementType: 'event_milestone',
                         metrics: {
                             eventCount: milestone
                         }
                     });
                     await journey.save();
+
+                    // Send notification for event milestone
+                    await sendOrganizationAchievementNotification(
+                        org._id,
+                        achievementTitle,
+                        achievementDescription,
+                        'event_milestone'
+                    );
                     break; // Only add the most recent milestone
                 }
             }
@@ -208,14 +397,25 @@ const updateOrganizationJourney = async (req, res) => {
 
             if (teams.length > 0 && !journey.Journey.some(j => j.title === 'First Team Created')) {
                 const firstTeam = teams.sort((a, b) => a.createdAt - b.createdAt)[0];
+                const achievementTitle = 'First Team Created';
+                const achievementDescription = `${org.name} created their first team: ${firstTeam.teamName}`;
+                
                 journey.Journey.push({
-                    title: 'First Team Created',
+                    title: achievementTitle,
                     Date: firstTeam.createdAt,
-                    description: `${org.name} created their first team: ${firstTeam.teamName}`,
+                    description: achievementDescription,
                     achievementType: 'participant_milestone',
                     metrics: {}
                 });
                 await journey.save();
+
+                // Send notification for first team creation
+                await sendOrganizationAchievementNotification(
+                    org._id,
+                    achievementTitle,
+                    achievementDescription,
+                    'participant_milestone'
+                );
             }
 
             // Check for participant milestones
@@ -225,16 +425,27 @@ const updateOrganizationJourney = async (req, res) => {
 
             for (const milestone of participantMilestones) {
                 if (participantCount >= milestone && !journey.Journey.some(j => j.title === `${milestone} Participants Milestone`)) {
+                    const achievementTitle = `${milestone} Participants Milestone`;
+                    const achievementDescription = `${org.name} has reached ${milestone} participants across all events!`;
+                    
                     journey.Journey.push({
-                        title: `${milestone} Participants Milestone`,
+                        title: achievementTitle,
                         Date: new Date(),
-                        description: `${org.name} has reached ${milestone} participants across all events!`,
+                        description: achievementDescription,
                         achievementType: 'participant_milestone',
                         metrics: {
                             totalParticipants: milestone
                         }
                     });
                     await journey.save();
+
+                    // Send notification for participant milestone
+                    await sendOrganizationAchievementNotification(
+                        org._id,
+                        achievementTitle,
+                        achievementDescription,
+                        'participant_milestone'
+                    );
                     break; // Only add the most recent milestone
                 }
             }
@@ -276,6 +487,14 @@ const scheduleDailyUpdate = async () => {
                 });
                 await journey.save();
                 updateCount++;
+
+                // Send notification for organization creation
+                await sendOrganizationAchievementNotification(
+                    org._id,
+                    'Organization Created',
+                    `${org.name} has successfully joined our platform!`,
+                    'registration'
+                );
                 continue;
             }
 
@@ -286,10 +505,13 @@ const scheduleDailyUpdate = async () => {
             const firstEvent = events[0];
 
             if (firstEvent && !journey.Journey.some(j => j.achievementType === 'event_milestone' && j.title === 'First Event Created')) {
+                const achievementTitle = 'First Event Created';
+                const achievementDescription = `${org.name} created their first event: ${firstEvent.eventName}`;
+                
                 journey.Journey.push({
-                    title: 'First Event Created',
+                    title: achievementTitle,
                     Date: firstEvent.createdAt,
-                    description: `${org.name} created their first event: ${firstEvent.eventName}`,
+                    description: achievementDescription,
                     achievementType: 'event_milestone',
                     metrics: {
                         eventCount: 1,
@@ -297,6 +519,14 @@ const scheduleDailyUpdate = async () => {
                     }
                 });
                 updated = true;
+
+                // Send notification for first event creation
+                await sendOrganizationAchievementNotification(
+                    org._id,
+                    achievementTitle,
+                    achievementDescription,
+                    'event_milestone'
+                );
             }
 
             // Check for event count milestones (5, 10, 25, 50, 100)
@@ -305,16 +535,27 @@ const scheduleDailyUpdate = async () => {
 
             for (const milestone of eventMilestones) {
                 if (eventCount >= milestone && !journey.Journey.some(j => j.title === `${milestone} Events Milestone`)) {
+                    const achievementTitle = `${milestone} Events Milestone`;
+                    const achievementDescription = `${org.name} has organized ${milestone} events!`;
+                    
                     journey.Journey.push({
-                        title: `${milestone} Events Milestone`,
+                        title: achievementTitle,
                         Date: new Date(),
-                        description: `${org.name} has organized ${milestone} events!`,
+                        description: achievementDescription,
                         achievementType: 'event_milestone',
                         metrics: {
                             eventCount: milestone
                         }
                     });
                     updated = true;
+
+                    // Send notification for event milestone
+                    await sendOrganizationAchievementNotification(
+                        org._id,
+                        achievementTitle,
+                        achievementDescription,
+                        'event_milestone'
+                    );
                     break; // Only add the most recent milestone
                 }
             }
@@ -324,14 +565,25 @@ const scheduleDailyUpdate = async () => {
 
             if (teams.length > 0 && !journey.Journey.some(j => j.title === 'First Team Created')) {
                 const firstTeam = teams.sort((a, b) => a.createdAt - b.createdAt)[0];
+                const achievementTitle = 'First Team Created';
+                const achievementDescription = `${org.name} created their first team: ${firstTeam.teamName}`;
+                
                 journey.Journey.push({
-                    title: 'First Team Created',
+                    title: achievementTitle,
                     Date: firstTeam.createdAt,
-                    description: `${org.name} created their first team: ${firstTeam.teamName}`,
+                    description: achievementDescription,
                     achievementType: 'participant_milestone',
                     metrics: {}
                 });
                 updated = true;
+
+                // Send notification for first team creation
+                await sendOrganizationAchievementNotification(
+                    org._id,
+                    achievementTitle,
+                    achievementDescription,
+                    'participant_milestone'
+                );
             }
 
             // Check for participant milestones
@@ -341,16 +593,27 @@ const scheduleDailyUpdate = async () => {
 
             for (const milestone of participantMilestones) {
                 if (participantCount >= milestone && !journey.Journey.some(j => j.title === `${milestone} Participants Milestone`)) {
+                    const achievementTitle = `${milestone} Participants Milestone`;
+                    const achievementDescription = `${org.name} has reached ${milestone} participants across all events!`;
+                    
                     journey.Journey.push({
-                        title: `${milestone} Participants Milestone`,
+                        title: achievementTitle,
                         Date: new Date(),
-                        description: `${org.name} has reached ${milestone} participants across all events!`,
+                        description: achievementDescription,
                         achievementType: 'participant_milestone',
                         metrics: {
                             totalParticipants: milestone
                         }
                     });
                     updated = true;
+
+                    // Send notification for participant milestone
+                    await sendOrganizationAchievementNotification(
+                        org._id,
+                        achievementTitle,
+                        achievementDescription,
+                        'participant_milestone'
+                    );
                     break; // Only add the most recent milestone
                 }
             }
@@ -406,20 +669,32 @@ const testAddJourneyMilestone = async (req, res) => {
             });
         }
 
+        const testTitle = title || 'Test Milestone';
+        const testDescription = description || `Test milestone for ${organization.name}`;
+        const testAchievementType = achievementType || 'event_milestone';
+
         // Add new milestone
         journey.Journey.push({
-            title: title || 'Test Milestone',
+            title: testTitle,
             Date: new Date(),
-            description: description || `Test milestone for ${organization.name}`,
-            achievementType: achievementType || 'event_milestone',
+            description: testDescription,
+            achievementType: testAchievementType,
             metrics: metrics || {}
         });
 
         await journey.save();
 
+        // Send test notification
+        await sendOrganizationAchievementNotification(
+            organizationId,
+            testTitle,
+            testDescription,
+            testAchievementType
+        );
+
         return res.status(200).json({
             success: true,
-            message: 'Test milestone added successfully',
+            message: 'Test milestone added successfully with notification sent',
             journey
         });
     } catch (error) {
@@ -461,6 +736,14 @@ const testSchemaFix = async (req, res) => {
                 }]
             });
             await journey.save();
+
+            // Send notification for organization creation
+            await sendOrganizationAchievementNotification(
+                organizationId,
+                'Organization Created',
+                `${organization.name} has successfully joined our platform!`,
+                'registration'
+            );
         }
 
         // Try to populate the organization
@@ -469,7 +752,7 @@ const testSchemaFix = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: 'Schema test completed successfully',
+            message: 'Schema test completed successfully with notifications',
             organization,
             journey,
             populatedJourney
@@ -488,5 +771,6 @@ module.exports = {
     updateOrganizationJourney,
     scheduleDailyUpdate,
     testAddJourneyMilestone,
-    testSchemaFix
+    testSchemaFix,
+    sendOrganizationAchievementNotification
 };

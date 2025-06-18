@@ -1,6 +1,7 @@
 const User = require('../../models/User');
 const Following = require('../../models/Following');
 const mongoose = require('mongoose');
+const Organization = require('../../models/Organizations')
 
 /**
  * Generate follower suggestions for a user based on multiple factors:
@@ -15,7 +16,10 @@ const HandleShowFollowingListToUser = async (req, res) => {
         const userId = req.user.id;
         
         // Get current user details
-        const currentUser = await User.findById(userId);
+        let currentUser = await User.findById(userId);
+        if (!currentUser) {
+            currentUser = await Organization.findById(userId);
+        }
         if (!currentUser) {
             return res.status(404).json({
                 success: false,

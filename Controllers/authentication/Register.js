@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const { tr } = require('date-fns/locale');
 const { generateUserResume } = require('../../Controllers/application/UserResume');
 const journey = require('../../models/OrganizationJourney');
+const { HandleSendJoinNotification } = require('../application/Notification');
 
 const otpInstances = {}; // Store OTP instances and verification status
 
@@ -149,9 +150,7 @@ const createInitialUserResume = async (userId, user) => {
                     metrics: { achievementType: 'registration' }
                 }]
             });
-
-            await userResume.save();
-            console.log(`Created initial resume for user ${userId}`);
+            userResume = await userResume.save();
         }
 
         return userResume;
@@ -235,7 +234,7 @@ const registerUser = async (req, res) => {
         await newUser.save();
 
         // Create initial user resume with registration achievement
-        await createInitialUserResume(newUser._id, newUser);
+        const resume = await createInitialUserResume(newUser._id, newUser);
 
         // Generate JWT tokens
         const accessToken = jwt.sign(
@@ -277,6 +276,8 @@ const registerUser = async (req, res) => {
 
         // Cleanup OTP instance after successful registration
         delete otpInstances[email];
+
+        HandleSendJoinNotification(newUser,"user");
 
         // Send tokens in response body for localStorage
         console.log("User registered successfully");
@@ -408,6 +409,7 @@ const registerOrganization = async (req, res) => {
         newOrganization.refreshToken = refreshToken;
         await newOrganization.save();
 
+
         // Set access token in HTTP-only, Secure cookie
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
@@ -428,6 +430,8 @@ const registerOrganization = async (req, res) => {
 
         // Cleanup OTP instance after successful registration
         delete otpInstances[email];
+
+         HandleSendJoinNotification(newOrganization,"organization");
 
         // Send tokens in response body for localStorage
         return res.status(201).json({

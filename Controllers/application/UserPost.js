@@ -3,32 +3,35 @@ const Post = require('../../models/Post')
 const UserResume = require('../../models/UserResume');
 const mongoose = require('mongoose');
 const CloudinaryConfig = require('../../config/CloudinaryConfig');
+const { HandleSendLikeNotifiction,HandleSendCommentNotification,HandleSendNotificationOnPlatfrom } = require('./Notification');
+const Follower = require('../../models/Follower');
 const fs = require('fs').promises;
 
 // Helper function to extract public ID from Cloudinary URL
 const extractPublicIdFromUrl = (url) => {
-  if (!url) return null;
-  
-  try {
-    // Extract public ID from Cloudinary URL
-    // Example URL: https://res.cloudinary.com/your-cloud/image/upload/v1234567890/posts/filename.jpg
-    const urlParts = url.split('/');
-    const uploadIndex = urlParts.findIndex(part => part === 'upload');
-    
-    if (uploadIndex !== -1 && uploadIndex + 2 < urlParts.length) {
-      // Get everything after 'upload/v{version}/'
-      const pathParts = urlParts.slice(uploadIndex + 2);
-      const fullPath = pathParts.join('/');
-      // Remove file extension
-      return fullPath.replace(/\.[^/.]+$/, '');
+    if (!url) return null;
+
+    try {
+        // Extract public ID from Cloudinary URL
+        // Example URL: https://res.cloudinary.com/your-cloud/image/upload/v1234567890/posts/filename.jpg
+        const urlParts = url.split('/');
+        const uploadIndex = urlParts.findIndex(part => part === 'upload');
+
+        if (uploadIndex !== -1 && uploadIndex + 2 < urlParts.length) {
+            // Get everything after 'upload/v{version}/'
+            const pathParts = urlParts.slice(uploadIndex + 2);
+            const fullPath = pathParts.join('/');
+            // Remove file extension
+            return fullPath.replace(/\.[^/.]+$/, '');
+        }
+
+        return null;
+    } catch (error) {
+        console.error('Error extracting public ID from URL:', error);
+        return null;
     }
-    
-    return null;
-  } catch (error) {
-    console.error('Error extracting public ID from URL:', error);
-    return null;
-  }
 };
+
 
 // Get all posts for a user
 const GetUserPosts = async (req, res) => {
@@ -80,15 +83,116 @@ const HandlePandingPost = async (req, res) => {
 }
 
 // Add a new post
+const sendPostNotificationsToFollowers = async (userId, postData, postId) => {
+    try {
+        // Get the user who created the post
+        const postCreator = await User.findById(userId);
+        if (!postCreator) {
+            console.error('Post creator not found');
+            return;
+        }
+
+        // Find followers of the user who created the post
+        const followersDoc = await Follower.findOne({ 
+            userid: userId,
+            entityType: 'user'
+        });
+
+        if (!followersDoc || !followersDoc.list || followersDoc.list.length === 0) {
+            console.log('No followers found for user:', userId);
+            return;
+        }
+
+        // Process followers in batches to avoid overwhelming the system
+        const batchSize = 10;
+        const followers = followersDoc.list;
+
+        console.log("start noti")
+        
+        const processBatch = async (startIdx) => {
+            const batch = followers.slice(startIdx, startIdx + batchSize);
+            const promises = [];
+
+            for (const follower of batch) {
+                promises.push((async () => {
+                    try {
+                        // Get follower user details
+                        const followerUser = await User.findOne({ userid: follower.userid });
+                        if (!followerUser) {
+                            console.log(`Follower user not found: ${follower.userid}`);
+                            return;
+                        }
+
+                        // Determine notification content based on post type
+                        let notificationData;
+                        
+                        if (postData.isAchievementPosted) {
+                            // Achievement post notification
+                            notificationData = {
+                                type: 'post',
+                                title: '🏆 New Achievement Shared!',
+                                message: `${postCreator.name} shared a new achievement: "${postData.title || 'Achievement'}"`,
+                                time: new Date(),
+                                read: false,
+                                avatar:  '🎉',
+                                icon: "Trophy",
+                                link: `/user/${postCreator.userid}/post/${postId}`,
+                            };
+                        } else {
+                            // Regular post notification
+                            notificationData = {
+                                type: 'post',
+                                title: '📝 New Post from ' + postCreator.name,
+                                message: `${postCreator.name} shared: "${postData.title || postData.content.substring(0, 50)}${postData.description.length > 50 ? '...' : ''}"`,
+                                time: new Date(),
+                                read: false,
+                                avatar:  '👤',
+                                icon: "Pencil",
+                                link: `/user/${postCreator.userid}/post/${postId}`,
+                            };
+                        }
+
+                        // Send notification
+                        console.log("start noti2")
+                        await HandleSendNotificationOnPlatfrom(notificationData, followerUser);
+                        
+                    } catch (error) {
+                        console.error(`Error sending notification to follower ${follower.userid}:`, error);
+                    }
+                })());
+            }
+
+            await Promise.all(promises);
+
+            // Process next batch if there are more followers
+            if (startIdx + batchSize < followers.length) {
+                // Add a small delay between batches
+                setTimeout(() => {
+                    processBatch(startIdx + batchSize);
+                }, 500);
+            }
+        };
+
+        // Start processing first batch
+        processBatch(0);
+
+        console.log(`Started sending notifications to ${followers.length} followers`);
+
+    } catch (error) {
+        console.error('Error in sendPostNotificationsToFollowers:', error);
+    }
+};
+
 const HandleAddAchievementPost = async (req, res) => {
     try {
         const userId = req.user.id;
         const { title, description, content, isAchievementPosted, isAchivementPosted, achievementid } = req.body;
-        
-        if (!title || !description || !content) {
+
+        if (!description || !content) {
             return res.status(400).json({ message: 'All required fields must be provided' });
         }
-          let image_path = "";
+
+        let image_path = "";
         if (req.file) {
             // Upload to Cloudinary
             const result = await CloudinaryConfig.uploadFile(req.file, 'posts');
@@ -103,44 +207,44 @@ const HandleAddAchievementPost = async (req, res) => {
                 console.error('Error deleting local file:', unlinkError);
             }
         }
-        
+
+        console.log({ title, description, content, isAchievementPosted, isAchivementPosted, achievementid });
+
         // Check if user exists
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
-        
+
         // If it's an achievement post, validate achievementid
         // Converting isAchievementPosted to a proper boolean to avoid comparison issues
         // Check for both the correctly spelled and misspelled versions of the field
-        const isAchievement = isAchievementPosted === true || 
-                             isAchievementPosted === "true" || 
-                             isAchivementPosted === true || 
-                             isAchivementPosted === "true";
-        
+        const isAchievement = isAchievementPosted === true ||
+            isAchievementPosted === "true" ||
+            isAchivementPosted === true ||
+            isAchivementPosted === "true";
+
         if (isAchievement) {
-            
             // Need to import mongoose at the top of the file
             if (!achievementid || !mongoose.Types.ObjectId.isValid(achievementid)) {
                 return res.status(400).json({ message: 'Valid Achievement ID is required for achievement posts' });
             }
-            
+
             const userResume = await UserResume.findOne({
                 UserId: userId,
                 'Journey._id': new mongoose.Types.ObjectId(achievementid)
             });
-            
+
             // Find the specific achievement in the Journey array
             const achievement = userResume?.Journey?.find(
                 item => item._id.toString() === achievementid
             );
-            
+
             if (!userResume || !achievement) {
                 return res.status(404).json({ message: 'Achievement not found in user resume' });
             }
         }
-        
-        
+
         // Create new post object
         const newPost = {
             title,
@@ -152,15 +256,14 @@ const HandleAddAchievementPost = async (req, res) => {
             isAchievementPosted: isAchievement // Ensure consistent boolean value
         };
 
-        
         if (isAchievement) {
             newPost.achievementid = achievementid;
             newPost.isAchivementPosted = isAchievement; // Ensure consistent boolean value
         }
-        
+
         // Find or create the user's Post document
         let userPost = await Post.findOne({ userid: userId });
-        
+
         if (!userPost) {
             userPost = new Post({
                 userid: userId,
@@ -169,28 +272,67 @@ const HandleAddAchievementPost = async (req, res) => {
         } else {
             userPost.post.unshift(newPost);
         }
-        
+
         // Save the post
-        await userPost.save(); 
-        
+        const savedUserPost = await userPost.save();
+
+        // Get the ID of the newly created post
+        const createdPost = savedUserPost.post[0];
+        const postId = createdPost._id;
+
         // Update achievement status only if it's an achievement post
         if (isAchievement) {
             await UserResume.findOneAndUpdate(
                 { UserId: userId, 'Journey._id': new mongoose.Types.ObjectId(achievementid) },
                 { $set: { 'Journey.$[elem].isPosted': true } },
                 {
-                    arrayFilters: [{ 'elem._id':new mongoose.Types.ObjectId(achievementid) }],
+                    arrayFilters: [{ 'elem._id': new mongoose.Types.ObjectId(achievementid) }],
                     new: true
                 }
             );
         }
-        
-        
-        return res.status(201).json({ message: 'Post added successfully', post: newPost });
-        
+
+        // Send response immediately
+        res.status(201).json({ 
+            message: 'Post added successfully', 
+            post: createdPost,
+            postId: postId
+        });
+
+        // Send notifications to followers in the background
+        setTimeout(() => {
+            sendPostNotificationsToFollowers(userId, newPost, postId);
+        }, 1000);
+
     } catch (err) {
         console.error('Error adding post:', err);
         return res.status(500).json({ message: 'Internal server error', error: err.message });
+    }
+};
+
+// Additional utility function to get follower count (optional)
+const getFollowerCount = async (userId) => {
+    try {
+        const followersDoc = await Follow.findOne({ 
+            userid: userId,
+            entityType: 'user'
+        });
+        
+        return followersDoc ? followersDoc.list.length : 0;
+    } catch (error) {
+        console.error('Error getting follower count:', error);
+        return 0;
+    }
+};
+
+// Additional utility function to check if user has followers (optional)
+const hasFollowers = async (userId) => {
+    try {
+        const count = await getFollowerCount(userId);
+        return count > 0;
+    } catch (error) {
+        console.error('Error checking if user has followers:', error);
+        return false;
     }
 };
 
@@ -216,7 +358,7 @@ const HandleCheckUserLikeOrNot = async (req, res) => {
             liked: alreadyLiked
         });
     }
-    catch (err) {   
+    catch (err) {
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
@@ -264,7 +406,7 @@ const HandleUpdatePost = async (req, res) => {
             }
             // Set the new image path
             post.image_path = result.url;
-            
+
             // Delete local file after upload
             try {
                 await fs.unlink(req.file.path);
@@ -305,7 +447,7 @@ const HandleDeletePost = async (req, res) => {
 
         // Find the specific post to delete its image first
         const post = postDoc.post.id(postId);
-        
+
         // Delete the image from Cloudinary if it exists
         if (post.image_path) {
             const publicId = extractPublicIdFromUrl(post.image_path);
@@ -324,7 +466,7 @@ const HandleDeletePost = async (req, res) => {
         postDoc.post.pull({ _id: postId });
         await postDoc.save();
 
-        return res.status(200).json({ 
+        return res.status(200).json({
             message: 'Post deleted successfully',
             deletedImage: !!post.image_path
         });
@@ -358,6 +500,7 @@ const HandleLikePost = async (req, res) => {
         } else {
             // Add like
             post.likes.push(userId);
+            HandleSendLikeNotifiction(postDoc.userid,post,req);
         }
 
         await postDoc.save();
@@ -414,6 +557,8 @@ const HandleCommentPost = async (req, res) => {
             ...newComment,
             user: commentUser
         };
+
+        HandleSendCommentNotification(postDoc.userid,post,req)
 
         return res.status(200).json({
             message: 'Comment added successfully',
@@ -496,28 +641,28 @@ const GetPostLikes = async (req, res) => {
 
 const HandlePostCount = async (req, res) => {
     try {
-      const userId = req.params.id;
+        const userId = req.params.id;
 
-      // Check if user exists
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-  
-      // Get user's posts with populated user data
-      const posts = await Post.findOne({ userid: userId })
-  
-      if (!posts) {
-        return res.status(200).json({ message: 'No posts found for this user', posts: [] });
-      }
-      
-      const PostCount = posts.post.length
-  
-      return res.status(200).json({ PostCount });
+        // Check if user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Get user's posts with populated user data
+        const posts = await Post.findOne({ userid: userId })
+
+        if (!posts) {
+            return res.status(200).json({ message: 'No posts found for this user', posts: [] });
+        }
+
+        const PostCount = posts.post.length
+
+        return res.status(200).json({ PostCount });
     } catch (err) {
-      return res.status(500).json({ message: 'Internal server error' });
+        return res.status(500).json({ message: 'Internal server error' });
     }
-  }
+}
 
 const HandleGetUserPostById = async (req, res) => {
     try {
@@ -531,9 +676,9 @@ const HandleGetUserPostById = async (req, res) => {
         const newId = NewUser[0]._id.toString()
 
         // Find post document for the user
-        const postDoc = await Post.findOne({ 
+        const postDoc = await Post.findOne({
             userid: newId,
-            'post._id': postId 
+            'post._id': postId
         }).populate('userid', 'name email profileImage userid');
 
         if (!postDoc) {
@@ -546,7 +691,7 @@ const HandleGetUserPostById = async (req, res) => {
             return res.status(404).json({ message: 'Post not found' });
         }
 
-        return res.status(200).json({ 
+        return res.status(200).json({
             post: {
                 ...post.toObject(),
                 user: postDoc.userid
@@ -556,6 +701,9 @@ const HandleGetUserPostById = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
+
+
+
 
 module.exports = {
     HandlePandingPost,
@@ -569,5 +717,5 @@ module.exports = {
     GetPostLikes,
     HandleCheckUserLikeOrNot,
     HandlePostCount,
-    HandleGetUserPostById
+    HandleGetUserPostById,
 }

@@ -3,6 +3,9 @@ const User = require("../../models/User");
 const Organization = require("../../models/Organizations");
 const Follower = require("../../models/Follower");
 const Following = require("../../models/Following");
+const Notification = require("../../models/Notification"); // Add this import
+const { HandleSendNotificationOnPlatfrom } = require("./Notification");
+
 
 // Helper function to get entity (user or organization) by ID
 const getEntityById = async (id) => {
@@ -221,12 +224,32 @@ const HandleAddFollower = async (req, res) => {
 
         await userFollowerDoc.save();
 
+        // 🔔 Send notification to the user being followed
+        const followerEntityText = detectedFollowerType === 'organization' ? 'organization' : 'user';
+        const userEntityText = detectedEntityType === 'organization' ? 'organization' : 'profile';
+        
+        const notificationItem = {
+            type: 'follow',
+            title: `New Follower!`,
+            message: `${followerExists.name} (${followerEntityText}) started following your ${userEntityText}.`,
+            time: new Date(),
+            read: false,
+            avatar:'👤',
+            icon: "UserPlus",
+            link: detectedFollowerType === 'organization' 
+                ? `/organization/${FollowerEntry.userid}` 
+                : `/user/${FollowerEntry.userid}`
+        };
+
+        await HandleSendNotificationOnPlatfrom(notificationItem, userExists);
+
         return res.status(200).json({ 
             message: "Follower added successfully", 
             success: true, 
             data: userFollowerDoc 
         });
     } catch (err) {
+        console.error("Error adding follower:", err);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -236,6 +259,14 @@ const HandleUnfollow = async (req, res) => {
     try {
         const { userid } = req.body;
         const followerid = req.user.id;
+
+        // Get entity details before unfollowing for notification
+        const { entity: userExists, entityType: detectedEntityType } = await getEntityById(userid);
+        const { entity: followerExists, entityType: detectedFollowerType } = await getEntityById(followerid);
+
+        if (!userExists || !followerExists) {
+            return res.status(404).json({ error: "Entity not registered on the platform" });
+        }
 
         // ✅ Remove from following list
         const followingResult = await HandleRemoveFollowing(followerid, userid);
@@ -249,8 +280,31 @@ const HandleUnfollow = async (req, res) => {
             return res.status(400).json({ error: followerResult.error });
         }
 
+        // 🔔 Send notification to the user being unfollowed (optional - you may not want this)
+        // Uncomment if you want to notify users when someone unfollows them
+        /*
+        const followerEntityText = detectedFollowerType === 'organization' ? 'organization' : 'user';
+        const userEntityText = detectedEntityType === 'organization' ? 'organization' : 'profile';
+        
+        const notificationItem = {
+            type: 'unfollowed',
+            title: `${followerExists.name} unfollowed you`,
+            message: `${followerExists.name} (${followerEntityText}) stopped following your ${userEntityText}.`,
+            time: new Date(),
+            read: false,
+            avatar: followerExists.profileImage || '👤',
+            icon: "UserMinus",
+            link: detectedFollowerType === 'organization' 
+                ? `/organization/${followerid}` 
+                : `/profile/${followerid}`
+        };
+
+        await HandleSendNotificationOnPlatfrom(notificationItem, userExists);
+        */
+
         return res.status(200).json({ message: "Successfully unfollowed", success: true });
     } catch (err) {
+        console.error("Error unfollowing:", err);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -286,6 +340,7 @@ const HandleCheckIsFollowed = async (req, res) => {
         }
     }
     catch (err) {
+        console.error("Error checking follow status:", err);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -314,7 +369,8 @@ const HandleGetFollowerAndFollowingList = async (req, res) => {
             followingList 
         });
 
-    } catch (err) {W
+    } catch (err) {
+        console.error("Error getting follower/following list:", err);
         return res.status(500).json({ error: "Server error" });
     }
 };

@@ -7,9 +7,11 @@ const UserResume = require('../../models/UserResume')
 const SendMail = require('../../config/SendMail')
 const Organization = require('../../models/Organizations')
 const { updateUserActivityAfterEvent } = require('./UserActivity')
+const { HandleSendNotificationOnPlatfrom } = require('./Notification')
 
 // Create an instance of SendMail with admin credentials
 const mailer = new SendMail(process.env.ADMIN_EMAIL, process.env.EMAIL_PASS);
+
 
 const HandleAddTeamMemberInEvents = async (req, res) => {
     try {
@@ -67,7 +69,7 @@ const HandleAddTeamMemberInEvents = async (req, res) => {
             eventMember
         });
 
-        // Process emails and resume updates in the background
+        // Process emails, notifications, and resume updates in the background
         setTimeout(() => {
             processTeamMembersBackground(eventHead, eventViceHead, eventTeams, eventId, organizationId, organization, event);
         }, 500);
@@ -144,6 +146,19 @@ const processTeamMembersBackground = async (eventHead, eventViceHead, eventTeams
                         userResume.Journey.push(journeyEntry);
                         await userResume.save();
                         
+                        // Send notification for resume update
+                        const resumeNotification = {
+                            type: 'congratulation',
+                            title: `New Achievement Added!`,
+                            message: `Your role as ${role} in "${event.eventName}" has been added to your resume!`,
+                            time: new Date(),
+                            read: false,
+                            avatar: '🏆',
+                            icon: "Award",
+                            link: `/user/${user.userid}`
+                        };
+                        await HandleSendNotificationOnPlatfrom(resumeNotification, user);
+                        
                         // Update user activity score
                         await updateUserActivityAfterEvent(memberId);
                     } catch (error) {
@@ -151,13 +166,33 @@ const processTeamMembersBackground = async (eventHead, eventViceHead, eventTeams
                     }
                 })());
                 
-                // Email sending promise
+                // Email and notification sending promise
                 promises.push((async () => {
                     try {
                         const role = memberId === eventHead ? 'Event Head' :
                             memberId === eventViceHead ? 'Event Vice Head' : 'Team Member';
                         const teamName = eventTeams.find(team => team.members.includes(memberId))?.teamName || 'General Team';
                         
+                        // Send event assignment notification
+                        const eventNotification = {
+                            type: 'event_assignment',
+                            title: `Event Assignment: ${role}`,
+                            message: `You've been assigned as ${role} for "${event.eventName}" by ${organization.name}`,
+                            time: new Date(),
+                            read: false,
+                            avatar: organization.logo || '🎉',
+                            icon: "Calendar",
+                            link: `/events/${eventId}`,
+                            metadata: {
+                                eventId: eventId,
+                                organizationId: organizationId,
+                                role: role,
+                                teamName: teamName
+                            }
+                        };
+                        await HandleSendNotificationOnPlatfrom(eventNotification, user);
+                        
+                        // Send email notification
                         const emailSubject = `You've been assigned to ${event.eventName}`;
                         const emailBody = `
                             Dear ${user.name},
@@ -196,8 +231,50 @@ const processTeamMembersBackground = async (eventHead, eventViceHead, eventTeams
         // Start processing first batch
         processBatch(0);
         
+        // Send notifications to other team members about new team formation
+        setTimeout(() => {
+            sendTeamFormationNotifications(allMembers, event, organization, userMap);
+        }, 2000);
+        
     } catch (error) {
         console.error("Error in background processing:", error);
+    }
+}
+
+// Function to send notifications to team members about team formation
+const sendTeamFormationNotifications = async (allMembers, event, organization, userMap) => {
+    try {
+        const memberIds = Array.from(allMembers);
+        
+        for (const memberId of memberIds) {
+            const user = userMap[memberId];
+            if (!user) continue;
+            
+            // Get other team members (excluding current user)
+            const otherMembers = memberIds.filter(id => id !== memberId);
+            const otherMemberNames = otherMembers.map(id => userMap[id]?.name).filter(Boolean);
+            
+            if (otherMemberNames.length > 0) {
+                const teamNotification = {
+                    type: 'team_formation',
+                    title: `Team Formed for ${event.eventName}`,
+                    message: `Your team has been formed! You'll be working with ${otherMemberNames.slice(0, 3).join(', ')}${otherMemberNames.length > 3 ? ` and ${otherMemberNames.length - 3} others` : ''}`,
+                    time: new Date(),
+                    read: false,
+                    avatar: '👥',
+                    icon: "Users",
+                    link: `/organization/${organization.userid}`,
+                    metadata: {
+                        eventId: event._id,
+                        organizationId: organization._id,
+                        teamMemberCount: otherMemberNames.length + 1
+                    }
+                };
+                await HandleSendNotificationOnPlatfrom(teamNotification, user);
+            }
+        }
+    } catch (error) {
+        console.error("Error sending team formation notifications:", error);
     }
 }
 
@@ -211,7 +288,6 @@ const HandleGetAllEvents = async (req, res) => {
         if (!organization) {
             return res.status(404).json({ message: "Organization not found" });
         }
-
 
         const event = await Event.findOne({
             _id: eventId,
@@ -331,14 +407,7 @@ const HandleUpdateEventMember = async (req, res) => {
             return res.status(404).json({ message: "Event member record not found" });
         }
 
-        // Update fields
-        eventMember.eventHead = eventHead || eventMember.eventHead;
-        eventMember.eventViceHead = eventViceHead || eventMember.eventViceHead;
-        eventMember.eventTeams = eventTeams || eventMember.eventTeams;
-
-        await eventMember.save();
-
-        // Get all affected members (new and old)
+        // Store old members for comparison
         const oldMembers = new Set();
         oldMembers.add(eventMember.eventHead);
         oldMembers.add(eventMember.eventViceHead);
@@ -346,6 +415,14 @@ const HandleUpdateEventMember = async (req, res) => {
             team.members.forEach(memberId => oldMembers.add(memberId));
         });
 
+        // Update fields
+        eventMember.eventHead = eventHead || eventMember.eventHead;
+        eventMember.eventViceHead = eventViceHead || eventMember.eventViceHead;
+        eventMember.eventTeams = eventTeams || eventMember.eventTeams;
+
+        await eventMember.save();
+
+        // Get new members
         const newMembers = new Set();
         newMembers.add(eventHead);
         newMembers.add(eventViceHead);
@@ -390,6 +467,38 @@ const HandleUpdateEventMember = async (req, res) => {
                 userResume.Journey.push(journeyEntry);
                 await userResume.save();
 
+                // Send resume update notification
+                const resumeNotification = {
+                    type: 'congratulation',
+                    title: `New Achievement Added!`,
+                    message: `Your role as ${role} in "${event.eventName}" has been added to your resume!`,
+                    time: new Date(),
+                    read: false,
+                    avatar: '🏆',
+                    icon: "Award",
+                    link: `/user/${user.userid}`
+                };
+                await HandleSendNotificationOnPlatfrom(resumeNotification, user);
+
+                // Send event assignment notification
+                const eventNotification = {
+                    type: 'info',
+                    title: `Event Assignment Updated: ${role}`,
+                    message: `You've been assigned as ${role} for "${event.eventName}" by ${organization.name}`,
+                    time: new Date(),
+                    read: false,
+                    avatar: organization.logo || '🎉',
+                    icon: "Info",
+                    link: `/organization/${organization.userid}`,
+                    metadata: {
+                        eventId: eventId,
+                        organizationId: organizationId,
+                        role: role,
+                        teamName: teamName
+                    }
+                };
+                await HandleSendNotificationOnPlatfrom(eventNotification, user);
+
                 // Send email notification
                 const emailSubject = `You've been assigned to ${event.eventName}`;
                 const emailBody = `
@@ -409,6 +518,30 @@ const HandleUpdateEventMember = async (req, res) => {
                 `;
 
                 await mailer.SendMail(user.email, process.env.ADMIN_EMAIL, emailSubject, emailBody);
+            }
+        }
+
+        // Send update notifications to existing members about team changes
+        for (const memberId of oldMembers) {
+            if (newMembers.has(memberId)) {
+                const user = await User.findById(memberId);
+                if (user) {
+                    const teamUpdateNotification = {
+                        type: 'team_update',
+                        title: `Team Updated for ${event.eventName}`,
+                        message: `Your event team has been updated. Check out the new team composition!`,
+                        time: new Date(),
+                        read: false,
+                        avatar: '🔄',
+                        icon: "RefreshCw",
+                        link: `/organization/${organization.userid}`,
+                        metadata: {
+                            eventId: eventId,
+                            organizationId: organizationId
+                        }
+                    };
+                    await HandleSendNotificationOnPlatfrom(teamUpdateNotification, user);
+                }
             }
         }
 

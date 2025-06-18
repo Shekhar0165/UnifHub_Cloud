@@ -1,12 +1,15 @@
 const User = require('../../models/User')
 const Organization = require('../../models/Organizations')
 const Team = require('../../models/Teams')
+const Notification = require('../../models/Notification') // Add this import
 const { addUserAchievement } = require('./UserResume')
 const { updateUserActivityAfterEvent } = require('./UserActivity')
+const { HandleSendNotificationOnPlatfrom } = require('./Notification')
+
 
 const HandleAddNewTeam = async (req, res) => {
     try {
-        const { teamName,OrganizationId, teamLeader, teamMembers } = req.body;
+        const { teamName, OrganizationId, teamLeader, teamMembers } = req.body;
 
         // Check if a team with the same name exists in the organization
         const existingTeam = await Team.findOne({ teamName, OrganizationId });
@@ -67,7 +70,6 @@ const HandleAddNewTeam = async (req, res) => {
             teamMembers
         });
 
-
         await newTeam.save();
 
         // Add achievement for team leader
@@ -85,9 +87,24 @@ const HandleAddNewTeam = async (req, res) => {
         // Update activity score for team leader
         await updateUserActivityAfterEvent(teamLeader.id);
 
-        // Add achievements for all team members
+        // Send notification to team leader
+        // const leaderNotification = {
+        //     type: 'congratulation',
+        //     title: `You're now leading ${teamName}!`,
+        //     message: `You have been assigned as the team leader of ${teamName} at ${organization.name}.`,
+        //     time: new Date(),
+        //     read: false,
+        //     avatar: '👑',
+        //     icon: "PartyPopper",
+        //     link: `/organization/${organization.userid}`
+        // };
+        // await HandleSendNotificationOnPlatfrom(leaderNotification, leader);
+
+        // Add achievements and send notifications for all team members
         await Promise.all(
             teamMembers.map(async (member) => {
+                const memberUser = await User.findById(member.id);
+                
                 await addUserAchievement(member.id, {
                     title: `Joined team ${teamName}`,
                     description: `Joined ${teamName} team at ${organization.name}.`,
@@ -101,11 +118,25 @@ const HandleAddNewTeam = async (req, res) => {
                 
                 // Update activity score for team member
                 await updateUserActivityAfterEvent(member.id);
+
+                // Send notification to team member
+                // const memberNotification = {
+                //     type: 'congratulation',
+                //     title: `Welcome to ${teamName}!`,
+                //     message: `You have been added to the team ${teamName} at ${organization.name}.`,
+                //     time: new Date(),
+                //     read: false,
+                //     avatar: '👥',
+                //     icon: "PartyPopper",
+                //     link: `/organization/${organization.userid}`
+                // };
+                // await HandleSendNotificationOnPlatfrom(memberNotification, memberUser);
             })
         );
 
         res.status(201).send("Team Created Successfully");
     } catch (err) {
+        console.error("Error creating team:", err);
         res.status(500).send("Internal Server Error");
     }
 };
@@ -179,10 +210,10 @@ const HandleUpdateTeam = async (req, res) => {
                 name: leader.name,
                 userid: leader.userid,
                 profile_path: leader.profileImage,
-                role: 'leader' // Add role field
+                role: 'leader'
             };
 
-            // Add achievement for new team leader if different from previous
+            // Add achievement and notification for new team leader if different from previous
             if (leader._id.toString() !== existingLeaderId) {
                 await addUserAchievement(leader._id, {
                     title: `Became leader of team ${teamName || findTeam.teamName}`,
@@ -194,6 +225,19 @@ const HandleUpdateTeam = async (req, res) => {
                         role: 'leader'
                     }
                 });
+
+                // Send notification to new team leader
+                // const leaderNotification = {
+                //     type: 'congratulation',
+                //     title: `You're now leading ${teamName || findTeam.teamName}!`,
+                //     message: `You have been promoted to team leader of ${teamName || findTeam.teamName} at ${organization.name}.`,
+                //     time: new Date(),
+                //     read: false,
+                //     avatar: '👑',
+                //     icon: "PartyPopper",
+                //     link: `/organization/${organization.userid}`
+                // };
+                // await HandleSendNotificationOnPlatfrom(leaderNotification, leader);
             }
         }
 
@@ -208,7 +252,7 @@ const HandleUpdateTeam = async (req, res) => {
                             name: foundMember.name,
                             userid: foundMember.userid,
                             profile_path: foundMember.profileImage,
-                            role: 'member' // Add role field
+                            role: 'member'
                         };
                     }
                     return null;
@@ -227,15 +271,17 @@ const HandleUpdateTeam = async (req, res) => {
 
             updates.teamMembers = members;
 
-            // Add achievements for new team members
+            // Add achievements and notifications for new team members
             const newMemberIds = teamMembers.map(member => member.id.toString());
             
             // Find members who are newly added
             const addedMembers = newMemberIds.filter(id => !existingMemberIds.includes(id));
             
-            // Add achievements for new members
+            // Add achievements and notifications for new members
             await Promise.all(
                 addedMembers.map(async (memberId) => {
+                    const memberUser = await User.findById(memberId);
+                    
                     await addUserAchievement(memberId, {
                         title: `Joined team ${teamName || findTeam.teamName}`,
                         description: `Joined ${teamName || findTeam.teamName} team at ${organization.name}.`,
@@ -246,6 +292,19 @@ const HandleUpdateTeam = async (req, res) => {
                             role: 'member'
                         }
                     });
+
+                    // Send notification to new team member
+                    // const memberNotification = {
+                    //     type: 'congratulation',
+                    //     title: `Welcome to ${teamName || findTeam.teamName}!`,
+                    //     message: `You have been added to the team ${teamName || findTeam.teamName} at ${organization.name}.`,
+                    //     time: new Date(),
+                    //     read: false,
+                    //     avatar: '👥',
+                    //     icon: "PartyPopper",
+                    //     link: `/organization/${organization.userid}`
+                    // };
+                    // await HandleSendNotificationOnPlatfrom(memberNotification, memberUser);
                 })
             );
         }
@@ -263,6 +322,7 @@ const HandleUpdateTeam = async (req, res) => {
         });
 
     } catch (error) {
+        console.error("Error updating team:", error);
         res.status(500).json({
             message: "Internal Server Error",
             error: error.message
@@ -272,8 +332,7 @@ const HandleUpdateTeam = async (req, res) => {
 
 const HandleDeleteTeam = async (req, res) => {
     try {
-        const { teamid,organizationId } = req.body;
-
+        const { teamid, organizationId } = req.body;
 
         // Validate team ID
         if (!teamid) {
@@ -294,6 +353,31 @@ const HandleDeleteTeam = async (req, res) => {
             });
         }
 
+        // Get organization for notification
+        const organization = await Organization.findById(organizationId);
+
+        // Send notifications to all team members and leader about team deletion
+        const allMembers = [...team.teamMembers, team.teamLeader];
+        
+        await Promise.all(
+            allMembers.map(async (member) => {
+                const memberUser = await User.findById(member.id);
+                if (memberUser) {
+                    const deletionNotification = {
+                        type: 'warning',
+                        title: `Team ${team.teamName} has been disbanded`,
+                        message: `The team ${team.teamName} at ${organization?.name || 'the organization'} has been deleted.`,
+                        time: new Date(),
+                        read: false,
+                        avatar: '🗑️',
+                        icon: "AlertTriangle",
+                        link: `/organization/${organization.userid}`
+                    };
+                    await HandleSendNotificationOnPlatfrom(deletionNotification, memberUser);
+                }
+            })
+        );
+
         // Delete the team
         const result = await Team.findByIdAndDelete(teamid);
 
@@ -303,6 +387,7 @@ const HandleDeleteTeam = async (req, res) => {
         });
 
     } catch (error) {
+        console.error("Error deleting team:", error);
         res.status(500).json({
             message: "Internal Server Error",
             error: error.message
@@ -310,6 +395,4 @@ const HandleDeleteTeam = async (req, res) => {
     }
 };
 
-
-module.exports = {HandleAddNewTeam,HandleGetTeam,HandleUpdateTeam,HandleDeleteTeam}
-
+module.exports = { HandleAddNewTeam, HandleGetTeam, HandleUpdateTeam, HandleDeleteTeam }
