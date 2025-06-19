@@ -100,6 +100,7 @@ app.use('/chat', require('./routes/api/Chat'))
 app.use('/follow-suggestion', require('./routes/api/FollowerSuggestion'))
 app.use('/chat', require('./routes/api/Chat'));
 app.use('/notification', require('./routes/api/Notification'));
+app.use('/usersettings', require('./routes/api/UserSettings'));
 
 
 io.on('connection', async (socket) => {

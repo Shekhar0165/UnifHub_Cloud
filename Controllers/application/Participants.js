@@ -1002,7 +1002,7 @@ support@unifhub.com | www.unifhub.com
 </body>
 </html>`;
       await SendMail.SendMailHTML(userEmail, senderEmail, subject, text, html)
-       if (element.id !== req.user.id) {
+      if (element.id !== req.user.id) {
         const notificationItem = {
           type: 'congratulation',
           title: `Acceptions for '${event.eventName}'`,
@@ -1683,7 +1683,7 @@ const HandleAddParticipants = async (req, res) => {
 
           // Update user activity score
           await updateUserActivityAfterEvent(req.user.id);
-          
+
 
           // const notificationItem = {
           //   type: 'congratulation',
@@ -1975,25 +1975,71 @@ const HandleDeclareResult = async (req, res) => {
   try {
     const { eventid, results } = req.body;
 
-
     // Validate event exists
     const event = await Event.findById(eventid);
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
 
-    // Extract only the date part (YYYY-MM-DD) from eventDate and current date
+    if(event.Result){
+      return res.status(404).json({ message: "Can Not Update Result" });
+    }
+
     const eventDate = event.eventDate.toISOString().slice(0, 10);
     const currentDate = new Date().toISOString().slice(0, 10);
 
-    // Check if event date is different from today's date
-    if (eventDate !== currentDate) {
-      return res.status(400).json({ message: "Event has not started yet." });
+    // Disallow declaring results before the event date
+    if (new Date(currentDate) < new Date(eventDate)) {
+      return res.status(400).json({ message: "You can declare results only on or after the event date." });
     }
+
 
     // Validate results array
     if (!Array.isArray(results) || results.length === 0) {
       return res.status(400).json({ message: "Results must be a non-empty array" });
+    }
+
+    // Check if results are already declared
+    const existingParticipants = await Participants.find({ eventid });
+    const hasResultsDeclared = existingParticipants.some(participant => participant.position > 0);
+
+    // If results are already declared, only allow updates (not initial declaration)
+    if (hasResultsDeclared && event.status !== "completed") {
+      return res.status(400).json({
+        message: "Results are already declared. You can only update existing results."
+      });
+    }
+
+    // Validate that all teams have positions assigned (no position should be 0)
+    const hasZeroPosition = results.some(result => !result.position || Number(result.position) === 0);
+    if (hasZeroPosition) {
+      return res.status(400).json({
+        message: "Please give position to each team. No team should have position 0."
+      });
+    }
+
+    // Validate that positions are unique
+    const positions = results.map(result => Number(result.position));
+    const uniquePositions = [...new Set(positions)];
+    if (positions.length !== uniquePositions.length) {
+      return res.status(400).json({
+        message: "Each team must have a unique position. Duplicate positions are not allowed."
+      });
+    }
+
+    // Validate that all teams exist in the event
+    const teamNames = results.map(result => result.teamName);
+    const existingTeams = await Participants.find({
+      eventid,
+      teamName: { $in: teamNames }
+    });
+
+    if (existingTeams.length !== teamNames.length) {
+      const foundTeamNames = existingTeams.map(team => team.teamName);
+      const missingTeams = teamNames.filter(name => !foundTeamNames.includes(name));
+      return res.status(400).json({
+        message: `Teams not found in this event: ${missingTeams.join(', ')}`
+      });
     }
 
     // Get organization details
@@ -2009,56 +2055,67 @@ const HandleDeclareResult = async (req, res) => {
       );
     });
 
+    event.Result = true;
+
+    await event.save();
+
     const updatedParticipants = await Promise.all(updatePromises);
 
     // Update event status to completed
     await Event.findByIdAndUpdate(eventid, { status: "completed" });
 
-    // Add achievements for participants
-    for (const team of updatedParticipants) {
-      if (!team) continue;
-      if (team.position === 0) continue;
+    // Add achievements for participants (only if results are being declared for the first time)
+    if (!hasResultsDeclared) {
+      for (const team of updatedParticipants) {
+        if (!team) continue;
+        if (team.position === 0) continue;
 
-      for (const participant of team.participant_id) {
-        const userId = participant.id;
+        for (const participant of team.participant_id) {
+          const userId = participant.id;
 
-        // Track first event completion
-        await trackFirstEventCompletion(userId, eventid, event.eventName, orgName);
+          // Track first event completion
+          await trackFirstEventCompletion(userId, eventid, event.eventName, orgName);
 
-        // Create achievement based on position
-        let title = `Participated in ${event.eventName}`;
-        let description = `Completed ${event.eventName} organized by ${orgName}.`;
+          // Create achievement based on position
+          let title = `Participated in ${event.eventName}`;
+          let description = `Completed ${event.eventName} organized by ${orgName}.`;
 
-        if (team.position === 1) {
-          title = `Won first place in ${event.eventName}`;
-          description = `Won first place in ${event.eventName} organized by ${orgName}.`;
-        } else if (team.position === 2) {
-          title = `Won second place in ${event.eventName}`;
-          description = `Won second place in ${event.eventName} organized by ${orgName}.`;
-        } else if (team.position === 3) {
-          title = `Won third place in ${event.eventName}`;
-          description = `Won third place in ${event.eventName} organized by ${orgName}.`;
+          if (team.position === 1) {
+            title = `Won first place in ${event.eventName}`;
+            description = `Won first place in ${event.eventName} organized by ${orgName}.`;
+          } else if (team.position === 2) {
+            title = `Won second place in ${event.eventName}`;
+            description = `Won second place in ${event.eventName} organized by ${orgName}.`;
+          } else if (team.position === 3) {
+            title = `Won third place in ${event.eventName}`;
+            description = `Won third place in ${event.eventName} organized by ${orgName}.`;
+          }
+
+          await addUserAchievement(userId, {
+            title,
+            description,
+            date: new Date(),
+            metrics: {
+              achievementType: "event_completion",
+              eventId: eventid,
+              position: team.position,
+              organizationId: event.organization_id,
+            },
+          });
         }
-
-        await addUserAchievement(userId, {
-          title,
-          description,
-          date: new Date(),
-          metrics: {
-            achievementType: "event_completion",
-            eventId: eventid,
-            position: team.position,
-            organizationId: event.organization_id,
-          },
-        });
       }
     }
 
+    const message = hasResultsDeclared
+      ? "Results updated successfully"
+      : "Results declared successfully";
+
     res.status(200).json({
-      message: "Results declared successfully",
+      message,
       updatedParticipants,
     });
   } catch (error) {
+    console.error('Error in HandleDeclareResult:', error);
     res.status(500).json({ message: "Error declaring results", error: error.message });
   }
 };

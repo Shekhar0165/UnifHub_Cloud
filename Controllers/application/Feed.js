@@ -7,7 +7,6 @@ const mongoose = require('mongoose');
 
 /**
  * Helper function to safely convert strings to MongoDB ObjectIds
- * Filters out invalid IDs and properly creates ObjectId instances
  */
 function safeObjectIds(idArray) {
     if (!idArray || !Array.isArray(idArray)) return [];
@@ -17,20 +16,82 @@ function safeObjectIds(idArray) {
 }
 
 /**
- * Get enhanced user feed with Instagram-like engagement features
- * Feed combines:
- * - Posts from followed users
- * - Posts liked by followed users (network amplification)
- * - Popular posts with high impression counts
- * - Events and organizations
- * - Prevents showing same content multiple times within 1-2 day window
+ * Calculate engagement score based on multiple factors
  */
+function calculateEngagementScore(post, userFollowingIds = []) {
+    const likes = post.likes?.length || 0;
+    const comments = post.comments?.length || 0;
+    const shares = post.shares?.length || 0;
+    const impressions = post.impressions?.length || 0;
+    
+    // Calculate engagement rate
+    const engagementRate = impressions > 0 ? (likes + comments + shares) / impressions : 0;
+    
+    // Time decay factor (newer posts get higher scores)
+    const postAge = Date.now() - new Date(post.createdAt).getTime();
+    const hoursAge = postAge / (1000 * 60 * 60);
+    const timeFactor = Math.exp(-hoursAge / 24); // Exponential decay over 24 hours
+    
+    // Network relevance (posts from connections get boosted)
+    const isFromConnection = userFollowingIds.includes(post.userId?.toString());
+    const networkBoost = isFromConnection ? 2 : 1;
+    
+    // Content quality indicators
+    const hasMedia = post.images?.length > 0 || post.video ? 1.5 : 1;
+    const hasHashtags = post.hashtags?.length > 0 ? 1.2 : 1;
+    const contentLength = post.content?.length || 0;
+    const lengthFactor = contentLength > 100 && contentLength < 500 ? 1.3 : 1;
+    
+    // Calculate final score
+    const baseScore = (likes * 3) + (comments * 5) + (shares * 7) + (impressions * 0.1);
+    const engagementBonus = engagementRate * 100;
+    
+    return (baseScore + engagementBonus) * timeFactor * networkBoost * hasMedia * hasHashtags * lengthFactor;
+}
 
+/**
+ * Get user's interests based on their activity
+ */
+async function getUserInterests(userId) {
+    try {
+        // Get posts user has engaged with
+        const engagedPosts = await Post.find({
+            $or: [
+                { 'post.likes': userId },
+                { 'post.comments.userId': userId },
+                { 'post.shares': userId }
+            ]
+        }).limit(50);
+        
+        // Extract hashtags and keywords
+        const interests = new Set();
+        engagedPosts.forEach(postDoc => {
+            postDoc.post.forEach(post => {
+                if (post.hashtags) {
+                    post.hashtags.forEach(tag => interests.add(tag.toLowerCase()));
+                }
+                // Simple keyword extraction from content
+                if (post.content) {
+                    const words = post.content.toLowerCase().match(/\b\w{4,}\b/g) || [];
+                    words.slice(0, 10).forEach(word => interests.add(word));
+                }
+            });
+        });
+        
+        return Array.from(interests);
+    } catch (error) {
+        console.error('Error getting user interests:', error);
+        return [];
+    }
+}
 
+/**
+ * Enhanced LinkedIn-style feed algorithm
+ */
 const GetEnhancedUserFeed = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { page = 1, limit = 10, lastSeen = [] } = req.body;
+        const { page = 1, limit = 15, lastSeen = [], feedType = 'all' } = req.body;
         
         const userObjectId = mongoose.Types.ObjectId.isValid(userId) ? 
             new mongoose.Types.ObjectId(userId) : null;
@@ -39,14 +100,18 @@ const GetEnhancedUserFeed = async (req, res) => {
             return res.status(400).json({ message: 'Invalid user ID' });
         }
         
-        // Find user follows
-        const userFollowing = await Following.findOne({ userid: userId });
+        const skip = (page - 1) * limit;
+        const validLastSeenIds = safeObjectIds(lastSeen);
         
-        // Get array of users this user follows
+        // Get user's network
+        const userFollowing = await Following.findOne({ userid: userId });
         const followingIds = userFollowing ? 
             userFollowing.list.map(follow => follow.followingid) : [];
-
-        // Find posts liked by the user to exclude them
+        
+        // Get user's interests
+        const userInterests = await getUserInterests(userId);
+        
+        // Get user's liked posts to exclude them
         const userLikedPosts = await Post.find({ 'post.likes': userObjectId }, { 'post._id': 1 });
         const likedPostIds = userLikedPosts.reduce((acc, doc) => {
             if (doc.post) {
@@ -54,333 +119,257 @@ const GetEnhancedUserFeed = async (req, res) => {
             }
             return acc;
         }, []);
-            
-        // Feed composition parameters
-        const followedPostsCount = 30;
-        const networkAmplifiedPostsCount = 20;
-        const popularPostsCount = 10;
-        const randomPostsCount = 20; // Number of random posts to fetch if feed is empty
         
-        // Calculate skip value based on page number
-        const skip = (page - 1) * limit;
+        // Time threshold for content freshness
+        const freshContentThreshold = new Date();
+        freshContentThreshold.setHours(freshContentThreshold.getHours() - 48); // 48 hours
         
-        // Convert lastSeen array to valid MongoDB ObjectIds
-        const validLastSeenIds = safeObjectIds(lastSeen);
-        
-        // Calculate time threshold for re-showing posts (1-2 days ago)
-        const minRecycleTime = new Date();
-        minRecycleTime.setDate(minRecycleTime.getDate() - 2);
-        
-        // Prepare impression filters
-        const impressionFilter = {
-            $or: [
-                { 'post.impressions.userId': { $ne: userObjectId } },
-                { 
-                    'post.impressions': { 
-                        $elemMatch: { 
-                            userId: userObjectId,
-                            viewedAt: { $lt: minRecycleTime }
-                        } 
-                    }
-                }
-            ]
+        // Base filters
+        const baseFilters = {
+            ...(validLastSeenIds.length > 0 ? { 'post._id': { $nin: validLastSeenIds } } : {}),
+            ...(likedPostIds.length > 0 ? { 'post._id': { $nin: likedPostIds } } : {}),
+            userid: { $ne: userObjectId }
         };
         
-        // Additional filter for already seen posts in this session
-        const notSeenFilter = validLastSeenIds.length > 0 ? 
-            { 'post._id': { $nin: validLastSeenIds } } : {};
-
-        // Additional filter to exclude liked posts
-        const notLikedFilter = likedPostIds.length > 0 ?
-            { 'post._id': { $nin: likedPostIds } } : {};
-            
-        // STEP 1: Get posts from followed users
-        const followedPosts = followingIds.length > 0 ? 
-            await Post.find({ 
+        let feedItems = [];
+        
+        // FEED COMPOSITION STRATEGY
+        
+        // 1. Recent posts from direct connections (40% of feed)
+        const connectionPosts = followingIds.length > 0 ? await Post.aggregate([
+            { $match: { 
                 userid: { $in: followingIds },
-                ...impressionFilter,
-                ...notSeenFilter,
-                ...notLikedFilter
-            })
-            .sort({ createdAt: -1 })
-            .limit(followedPostsCount)
-            .populate('userid', 'name email profileImage userid')
-            .lean() : [];
-            
-        // STEP 2: Get posts liked by people you follow (network amplification)
-        const networkAmplifiedPosts = followingIds.length > 0 ? 
-            await Post.aggregate([
-                { $match: { 
-                    'post.likes': { $in: followingIds },
-                    userid: { $nin: [...followingIds, userObjectId] },
-                    $or: [
-                        { 'post.impressions.userId': { $ne: userObjectId } },
-                        { 'post.impressions.viewedAt': { $lt: minRecycleTime } }
-                    ],
-                    ...(validLastSeenIds.length > 0 ? { 'post._id': { $nin: validLastSeenIds } } : {}),
-                    ...(likedPostIds.length > 0 ? { 'post._id': { $nin: likedPostIds } } : {})
-                }},
-                // Unwind the post array to work with individual posts
-                { $unwind: '$post' },
-                // Now filter to only keep posts that have been liked by followed users
-                { $match: { 'post.likes': { $in: followingIds } } },
-                // Look up the user info
-                { $lookup: {
-                    from: 'users',
-                    localField: 'userid',
-                    foreignField: '_id',
-                    as: 'userDetails'
-                }},
-                { $unwind: '$userDetails' },
-                // Add a field to track which followed users liked this post
-                { $addFields: {
-                    followedUsersWhoLiked: {
-                        $filter: {
-                            input: '$post.likes',
-                            as: 'likeId',
-                            cond: { $in: ['$$likeId', followingIds] }
-                        }
-                    },
-                    likeCount: { $size: '$post.likes' }
-                }},
-                // Sort by the number of followed users who liked and the total like count
-                { $sort: { 
-                    followedUsersWhoLikedCount: -1,
-                    likeCount: -1,
-                    'post.createdAt': -1 
-                }},
-                { $limit: networkAmplifiedPostsCount },
-                // Project the final structure
-                { $project: {
-                    _id: 1,
-                    post: 1,
-                    followedUsersWhoLiked: 1,
-                    likeCount: 1,
-                    'user.name': '$userDetails.name',
-                    'user.email': '$userDetails.email',
-                    'user.profileImage': '$userDetails.profileImage',
-                    'user._id': '$userDetails._id',
-                    'user.userid': '$userDetails.userid',
-                }}
-            ]) : [];
-            
-        // STEP 3: Get popular posts
-        const popularPosts = await Post.aggregate([
-            { $match: {
-                ...impressionFilter,
-                ...(validLastSeenIds.length > 0 ? { 'post._id': { $nin: validLastSeenIds } } : {}),
-                ...(likedPostIds.length > 0 ? { 'post._id': { $nin: likedPostIds } } : {}),
-                userid: { $ne: userObjectId },
-                userid: { $nin: followingIds }
+                ...baseFilters,
+                createdAt: { $gte: freshContentThreshold }
             }},
-            // Unwind the post array
             { $unwind: '$post' },
-            // Add impression count field
             { $addFields: {
-                impressionCount: { $size: { $ifNull: ['$post.impressions', []] } },
-                likeCount: { $size: { $ifNull: ['$post.likes', []] } }
+                engagementScore: {
+                    $add: [
+                        { $multiply: [{ $size: { $ifNull: ['$post.likes', []] } }, 3] },
+                        { $multiply: [{ $size: { $ifNull: ['$post.comments', []] } }, 5] },
+                        { $multiply: [{ $size: { $ifNull: ['$post.shares', []] } }, 7] }
+                    ]
+                }
             }},
-            // Create a popularity score (combination of impressions and likes)
-            { $addFields: {
-                popularityScore: { $add: ['$impressionCount', { $multiply: ['$likeCount', 2] }] }
-            }},
-            // Sort by the popularity score
-            { $sort: { popularityScore: -1 } },
-            { $limit: popularPostsCount },
-            // Look up user info
+            { $sort: { engagementScore: -1, 'post.createdAt': -1 } },
+            { $limit: Math.ceil(limit * 0.4) },
             { $lookup: {
                 from: 'users',
                 localField: 'userid',
                 foreignField: '_id',
                 as: 'userDetails'
             }},
-            { $unwind: '$userDetails' },
-            // Project the final structure
-            { $project: {
-                _id: 1,
-                post: 1,
-                impressionCount: 1,
-                likeCount: 1,
-                popularityScore: 1,
-                'user.name': '$userDetails.name',
-                'user.email': '$userDetails.email',
-                'user.profileImage': '$userDetails.profileImage',
-                'user._id': '$userDetails._id',
-                'user.userid': '$userDetails.userid'
-            }}
-        ]);
-
-        // Format all items for the feed
-        let feedItems = [];
+            { $unwind: '$userDetails' }
+        ]) : [];
         
-        // Add followed posts to feed
-        if (followedPosts.length > 0) {
-            followedPosts.forEach(postDoc => {
-                if (postDoc.post && Array.isArray(postDoc.post)) {
-                    postDoc.post.forEach(post => {
-                        if (post && post._id) {
-                            feedItems.push({
-                                id: post._id,
-                                type: 'post',
-                                source: 'followed',
-                                data: {
-                                    ...post,
-                                    user: postDoc.userid
-                                },
-                                createdAt: post.createdAt || postDoc.createdAt
-                            });
+        // 2. Viral content from network (posts liked by connections) (25% of feed)
+        const viralPosts = followingIds.length > 0 ? await Post.aggregate([
+            { $match: {
+                'post.likes': { $in: followingIds },
+                userid: { $nin: [...followingIds, userObjectId] },
+                ...baseFilters
+            }},
+            { $unwind: '$post' },
+            { $match: { 'post.likes': { $in: followingIds } } },
+            { $addFields: {
+                networkEngagement: {
+                    $size: {
+                        $filter: {
+                            input: '$post.likes',
+                            as: 'like',
+                            cond: { $in: ['$$like', followingIds] }
                         }
-                    });
+                    }
+                },
+                totalEngagement: {
+                    $add: [
+                        { $size: { $ifNull: ['$post.likes', []] } },
+                        { $multiply: [{ $size: { $ifNull: ['$post.comments', []] } }, 2] }
+                    ]
                 }
-            });
-        }
+            }},
+            { $sort: { networkEngagement: -1, totalEngagement: -1 } },
+            { $limit: Math.ceil(limit * 0.25) },
+            { $lookup: {
+                from: 'users',
+                localField: 'userid',
+                foreignField: '_id',
+                as: 'userDetails'
+            }},
+            { $unwind: '$userDetails' }
+        ]) : [];
         
-        // Add network amplified posts to feed
-        if (networkAmplifiedPosts.length > 0) {
-            networkAmplifiedPosts.forEach(item => {
-                if (item.post && item.post._id) {
-                    // Create list of users who liked this post that the current user follows
-                    const likedByFollowedUsers = item.followedUsersWhoLiked || [];
-                    
-                    feedItems.push({
-                        id: item.post._id,
-                        type: 'post',
-                        source: 'network',
-                        data: {
-                            ...item.post,
-                            user: item.user
-                        },
-                        likedBy: likedByFollowedUsers,
-                        likeCount: item.likeCount,
-                        createdAt: item.post.createdAt
-                    });
+        // 3. Interest-based content (20% of feed)
+        const interestBasedPosts = userInterests.length > 0 ? await Post.aggregate([
+            { $match: {
+                ...baseFilters,
+                userid: { $nin: followingIds },
+                $or: [
+                    { 'post.hashtags': { $in: userInterests } },
+                    { 'post.content': { $regex: userInterests.slice(0, 5).join('|'), $options: 'i' } }
+                ]
+            }},
+            { $unwind: '$post' },
+            { $addFields: {
+                relevanceScore: {
+                    $add: [
+                        { $multiply: [
+                            { $size: {
+                                $filter: {
+                                    input: { $ifNull: ['$post.hashtags', []] },
+                                    as: 'tag',
+                                    cond: { $in: [{ $toLower: '$$tag' }, userInterests] }
+                                }
+                            }}, 
+                            5
+                        ]},
+                        { $size: { $ifNull: ['$post.likes', []] } }
+                    ]
                 }
-            });
-        }
+            }},
+            { $sort: { relevanceScore: -1, 'post.createdAt': -1 } },
+            { $limit: Math.ceil(limit * 0.2) },
+            { $lookup: {
+                from: 'users',
+                localField: 'userid',
+                foreignField: '_id',
+                as: 'userDetails'
+            }},
+            { $unwind: '$userDetails' }
+        ]) : [];
         
-        // Add popular posts to feed
-        if (popularPosts.length > 0) {
-            popularPosts.forEach(item => {
-                if (item.post && item.post._id) {
-                    feedItems.push({
-                        id: item.post._id,
-                        type: 'post',
-                        source: 'popular',
-                        impressionCount: item.impressionCount,
-                        likeCount: item.likeCount,
-                        popularityScore: item.popularityScore,
-                        data: {
-                            ...item.post,
-                            user: item.user
-                        },
-                        createdAt: item.post.createdAt
-                    });
+        // 4. Trending content (high engagement from everyone) (15% of feed)
+        const trendingPosts = await Post.aggregate([
+            { $match: {
+                ...baseFilters,
+                userid: { $nin: followingIds },
+                createdAt: { $gte: freshContentThreshold }
+            }},
+            { $unwind: '$post' },
+            { $addFields: {
+                trendingScore: {
+                    $divide: [
+                        { $add: [
+                            { $multiply: [{ $size: { $ifNull: ['$post.likes', []] } }, 2] },
+                            { $multiply: [{ $size: { $ifNull: ['$post.comments', []] } }, 4] },
+                            { $multiply: [{ $size: { $ifNull: ['$post.shares', []] } }, 6] }
+                        ]},
+                        { $add: [
+                            { $divide: [
+                                { $subtract: [new Date(), '$post.createdAt'] },
+                                3600000 // Convert to hours
+                            ]},
+                            1
+                        ]}
+                    ]
                 }
-            });
-        }
-
-        // If feed is empty, get random posts
-        if (feedItems.length === 0) {
-            const randomPosts = await Post.aggregate([
+            }},
+            { $match: { trendingScore: { $gte: 1 } } }, // Only include posts with decent engagement
+            { $sort: { trendingScore: -1 } },
+            { $limit: Math.ceil(limit * 0.15) },
+            { $lookup: {
+                from: 'users',
+                localField: 'userid',
+                foreignField: '_id',
+                as: 'userDetails'
+            }},
+            { $unwind: '$userDetails' }
+        ]);
+        
+        // Process and format all posts
+        const processPostData = (posts, source) => {
+            return posts.map(item => ({
+                id: item.post._id,
+                type: 'post',
+                source: source,
+                data: {
+                    ...item.post,
+                    user: {
+                        name: item.userDetails.name,
+                        email: item.userDetails.email,
+                        profileImage: item.userDetails.profileImage,
+                        _id: item.userDetails._id,
+                        userid: item.userDetails.userid
+                    }
+                },
+                engagementScore: item.engagementScore || item.networkEngagement || item.relevanceScore || item.trendingScore || 0,
+                createdAt: item.post.createdAt
+            }));
+        };
+        
+        // Combine all posts
+        feedItems = [
+            ...processPostData(connectionPosts, 'connections'),
+            ...processPostData(viralPosts, 'viral'),
+            ...processPostData(interestBasedPosts, 'interests'),
+            ...processPostData(trendingPosts, 'trending')
+        ];
+        
+        // If feed is still small, add some random quality content
+        if (feedItems.length < limit) {
+            const additionalPosts = await Post.aggregate([
                 { $match: {
-                    userid: { $ne: userObjectId },
-                    ...(likedPostIds.length > 0 ? { 'post._id': { $nin: likedPostIds } } : {})
+                    ...baseFilters,
+                    'post._id': { $nin: feedItems.map(item => item.id) }
                 }},
-                { $sample: { size: randomPostsCount } },
                 { $unwind: '$post' },
+                { $addFields: {
+                    qualityScore: {
+                        $add: [
+                            { $size: { $ifNull: ['$post.likes', []] } },
+                            { $multiply: [{ $size: { $ifNull: ['$post.comments', []] } }, 2] }
+                        ]
+                    }
+                }},
+                { $match: { qualityScore: { $gte: 1 } } },
+                { $sample: { size: limit - feedItems.length } },
                 { $lookup: {
                     from: 'users',
                     localField: 'userid',
                     foreignField: '_id',
                     as: 'userDetails'
                 }},
-                { $unwind: '$userDetails' },
-                { $project: {
-                    _id: 1,
-                    post: 1,
-                    'user.name': '$userDetails.name',
-                    'user.email': '$userDetails.email',
-                    'user.profileImage': '$userDetails.profileImage',
-                    'user._id': '$userDetails._id',
-                    'user.userid': '$userDetails.userid'
-                }}
+                { $unwind: '$userDetails' }
             ]);
-
-            randomPosts.forEach(item => {
-                if (item.post && item.post._id) {
-                    feedItems.push({
-                        id: item.post._id,
-                        type: 'post',
-                        source: 'random',
-                        data: {
-                            ...item.post,
-                            user: item.user
-                        },
-                        createdAt: item.post.createdAt
-                    });
-                }
-            });
+            
+            feedItems.push(...processPostData(additionalPosts, 'discovery'));
         }
-
-        // Sort feed items by recency first (for equal weights)
-        feedItems.sort((a, b) => {
-            // Parse dates if they're strings
-            const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
-            const dateB = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-            return dateB - dateA;
-        });
         
-        // Apply weighting to ensure preferred content appears first
-        const weightedItems = feedItems.map(item => {
-            let weight = 1;
+        // Advanced sorting algorithm
+        feedItems.sort((a, b) => {
+            // Source priority weights
+            const sourceWeights = {
+                'connections': 10,
+                'viral': 7,
+                'interests': 5,
+                'trending': 3,
+                'discovery': 1
+            };
             
-            // Assign weights based on source
-            if (item.type === 'post') {
-                switch(item.source) {
-                    case 'followed':
-                        weight = 10;
-                        break;
-                    case 'network':
-                        weight = 5;
-                        break;
-                    case 'popular':
-                        weight = 2;
-                        break;
-                    case 'random':
-                        weight = 1; // Lowest priority for random posts
-                        break;
-                }
-            } else if (item.type === 'event') {
-                weight = 3;
-            } else if (item.type === 'organization') {
-                weight = 1;
+            const weightA = sourceWeights[a.source] || 1;
+            const weightB = sourceWeights[b.source] || 1;
+            
+            if (weightA !== weightB) {
+                return weightB - weightA;
             }
             
-            return { ...item, weight };
-        });
-
-        // Sort by weight and recency
-        weightedItems.sort((a, b) => {
-            if (a.weight !== b.weight) {
-                return b.weight - a.weight; // Higher weight first
+            // If same source, sort by engagement and recency
+            const engagementDiff = (b.engagementScore || 0) - (a.engagementScore || 0);
+            if (Math.abs(engagementDiff) > 5) {
+                return engagementDiff;
             }
             
-            // If weights are equal, sort by recency
-            const dateA = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
-            const dateB = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt);
-            return dateB - dateA;
+            // Finally, sort by recency
+            return new Date(b.createdAt) - new Date(a.createdAt);
         });
         
         // Apply pagination
-        const paginatedItems = weightedItems.slice(skip, skip + limit);
+        const paginatedItems = feedItems.slice(skip, skip + limit);
         
-        // Track impressions for posts in the feed
-        const postIds = paginatedItems
-            .filter(item => item.type === 'post' && item.id)
-            .map(item => item.id);
-            
+        // Record impressions
+        const postIds = paginatedItems.map(item => item.id);
         if (postIds.length > 0) {
-            // Update impressions for posts
             await Promise.all(
                 postIds.map(async (postId) => {
                     try {
@@ -396,67 +385,79 @@ const GetEnhancedUserFeed = async (req, res) => {
                             }
                         );
                     } catch (updateErr) {
-                        console.error(`Error updating impression for post ${postId}:`);
+                        console.error(`Error updating impression for post ${postId}:`, updateErr);
                     }
                 })
             );
         }
         
-        // Remove internal weight property before sending response
-        const cleanedItems = paginatedItems.map(({ weight, ...item }) => item);
-      
+        // Clean up response
+        const cleanedItems = paginatedItems.map(({ engagementScore, ...item }) => item);
+        
         return res.status(200).json({
-            message: 'Enhanced feed retrieved successfully',
+            message: 'Enhanced LinkedIn-style feed retrieved successfully',
             feed: cleanedItems,
             page,
-            hasMore: weightedItems.length > (skip + limit)
+            hasMore: feedItems.length > (skip + limit),
+            feedComposition: {
+                connections: paginatedItems.filter(item => item.source === 'connections').length,
+                viral: paginatedItems.filter(item => item.source === 'viral').length,
+                interests: paginatedItems.filter(item => item.source === 'interests').length,
+                trending: paginatedItems.filter(item => item.source === 'trending').length,
+                discovery: paginatedItems.filter(item => item.source === 'discovery').length
+            }
         });
         
     } catch (err) {
+        console.error('Feed error:', err);
         return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
 };
 
 /**
- * Mark post as viewed/record impression
+ * Enhanced impression recording with engagement tracking
  */
 const RecordImpression = async (req, res) => {
     try {
         const { postId } = req.params;
+        const { duration, scrollDepth, clicked } = req.body; // Additional engagement metrics
         const userId = req.user.id;
         
-        // Validate postId
         if (!mongoose.Types.ObjectId.isValid(postId)) {
             return res.status(400).json({ message: 'Invalid post ID format' });
         }
         
-        // Find the post
         const postDoc = await Post.findOne({ 'post._id': postId });
         if (!postDoc) {
             return res.status(404).json({ message: 'Post not found' });
         }
         
-        // Find the specific post
         const post = postDoc.post.id(postId);
         if (!post) {
             return res.status(404).json({ message: 'Specific post not found in document' });
         }
         
-        // Check if impression already exists
+        // Enhanced impression tracking
         const existingImpressionIndex = post.impressions.findIndex(
-            impression => impression.userId && 
-            impression.userId.toString() === userId
+            impression => impression.userId && impression.userId.toString() === userId
         );
         
+        const impressionData = {
+            userId,
+            viewedAt: new Date(),
+            duration: duration || 0,
+            scrollDepth: scrollDepth || 0,
+            clicked: clicked || false
+        };
+        
         if (existingImpressionIndex === -1) {
-            // Add new impression
-            post.impressions.push({
-                userId,
-                viewedAt: new Date()
-            });
+            post.impressions.push(impressionData);
         } else {
-            // Update existing impression with new timestamp
-            post.impressions[existingImpressionIndex].viewedAt = new Date();
+            // Update with latest data
+            post.impressions[existingImpressionIndex] = {
+                ...post.impressions[existingImpressionIndex],
+                ...impressionData
+            };
         }
         
         await postDoc.save();
@@ -467,31 +468,56 @@ const RecordImpression = async (req, res) => {
         });
         
     } catch (err) {
+        console.error('Impression recording error:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
 
 /**
- * Get more feed items for infinite scrolling
+ * Get feed analytics for admin/user insights
  */
-const GetMoreFeedItems = async (req, res) => {
+const GetFeedAnalytics = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { page, limit = 10, viewedPosts = [] } = req.body;
+        const userObjectId = new mongoose.Types.ObjectId(userId);
         
-        if (!page || page < 1) {
-            return res.status(400).json({ message: 'Valid page number is required' });
-        }
+        // Get user's feed performance
+        const analytics = await Post.aggregate([
+            { $match: { userid: userObjectId } },
+            { $unwind: '$post' },
+            { $addFields: {
+                impressions: { $size: { $ifNull: ['$post.impressions', []] } },
+                likes: { $size: { $ifNull: ['$post.likes', []] } },
+                comments: { $size: { $ifNull: ['$post.comments', []] } },
+                shares: { $size: { $ifNull: ['$post.shares', []] } }
+            }},
+            { $group: {
+                _id: null,
+                totalPosts: { $sum: 1 },
+                totalImpressions: { $sum: '$impressions' },
+                totalLikes: { $sum: '$likes' },
+                totalComments: { $sum: '$comments' },
+                totalShares: { $sum: '$shares' },
+                avgImpressions: { $avg: '$impressions' },
+                avgEngagementRate: { 
+                    $avg: { 
+                        $cond: [
+                            { $gt: ['$impressions', 0] },
+                            { $divide: [{ $add: ['$likes', '$comments', '$shares'] }, '$impressions'] },
+                            0
+                        ]
+                    }
+                }
+            }}
+        ]);
         
-        // Create a new request object with the properties we need
-        const newReq = {
-            ...req,
-            body: { page, limit, lastSeen: viewedPosts }
-        };
-        
-        return GetEnhancedUserFeed(newReq, res);
+        return res.status(200).json({
+            message: 'Feed analytics retrieved successfully',
+            analytics: analytics[0] || {}
+        });
         
     } catch (err) {
+        console.error('Analytics error:', err);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -499,5 +525,5 @@ const GetMoreFeedItems = async (req, res) => {
 module.exports = {
     GetEnhancedUserFeed,
     RecordImpression,
-    GetMoreFeedItems
+    GetFeedAnalytics
 };

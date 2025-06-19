@@ -1,9 +1,10 @@
 const bcrypt = require('bcrypt');
-const User = require('../../models/User'); 
-const Organizations = require('../../models/Organizations'); 
+const User = require('../../models/User');
+const Organizations = require('../../models/Organizations');
 const Otp = require('../../config/GenerateOtp');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose')
+const { HandleSendNotificationOnPlatfrom } = require('../application/Notification')
 
 const otpInstances = {}; // Store OTP instances and verification status
 
@@ -22,19 +23,19 @@ const validatePassword = (password) => {
 // Step 1: Send Verification Code
 const SendVerificationCode = async (req, res) => {
     const { email } = req.body;
-    
+
     if (!email || !validateEmail(email)) {
         return res.status(400).json({ message: "Please provide a valid email address" });
     }
-    
+
     try {
         const existingUser = await User.findOne({ email });
         const existingOrganization = await Organizations.findOne({ email });
-        
+
         if (!existingUser && !existingOrganization) {
             return res.status(404).json({ message: "Account not found with this email." });
         }
-        
+
         const account = existingUser || existingOrganization;
         console.log(account)
 
@@ -105,11 +106,11 @@ const forgetPassword = async (req, res) => {
         // Find the user
         const existingUser = await User.findOne({ email });
         const existingOrganization = await Organizations.findOne({ email });
-        
+
         if (!existingUser && !existingOrganization) {
             return res.status(404).json({ message: "Account not found with this email." });
         }
-        
+
         const account = existingUser || existingOrganization;
         console.log(account)
         let session;
@@ -144,7 +145,7 @@ const forgetPassword = async (req, res) => {
                 accessToken,
                 refreshToken
             });
-            
+
         } catch (error) {
             // If session was started, abort transaction
             if (session) {
@@ -160,8 +161,76 @@ const forgetPassword = async (req, res) => {
     }
 };
 
+
+const ChangePasswordFromToken = async (req, res) => {
+    const id = req.user.id;
+    const { oldpassword, newpassword } = req.body;
+
+    if (!oldpassword) {
+        return res.status(400).json({ message: "Old Password is required." });
+    }
+    if (!newpassword) {
+        return res.status(400).json({ message: "New Password is required." });
+    }
+
+    const existingUser = await User.findById(id);
+
+    let detectedFollowerType = 'user';
+
+    
+    const existingOrganization = await Organizations.findById(id);
+    
+    if(!existingUser){
+        detectedFollowerType = 'organization'
+    }
+    if (!existingUser && !existingOrganization) {
+        return res.status(404).json({ message: "You are not vaild User Please Contact Us" });
+    }
+
+    const account = existingUser || existingOrganization;
+    console.log(account)
+
+    const isMatch = await bcrypt.compare(oldpassword, account.password);
+    if (!isMatch) {
+        return res.status(401).json({ message: "Old Password Wrong!" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newpassword, 10);
+    account.password = hashedPassword;
+
+    const accessToken = jwt.sign({ id: account._id }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1d' });
+    const refreshToken = jwt.sign({ id: account._id }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+
+    // Store refresh token in DB
+    account.refreshToken = refreshToken;
+    await account.save();
+
+    const notificationItem = {
+        type: 'update',
+        title: `Change Password`,
+        message: `Your Password Get Change successfully`,
+        time: new Date(),
+        read: false,
+        avatar: '👤',
+        icon: "UserPlus",
+        link: detectedFollowerType === 'organization'
+            ? `/organization/${account.userid}`
+            : `/user/${account.userid}`
+    };
+
+    await HandleSendNotificationOnPlatfrom(notificationItem,account)
+
+    return res.status(200).json({
+        message: "Password Change successfully",
+        accessToken,
+        refreshToken
+    });
+}
+
+
 module.exports = {
     SendVerificationCode,
     IsEmailVerify,
-    forgetPassword
+    forgetPassword,
+    ChangePasswordFromToken
 };

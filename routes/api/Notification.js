@@ -4,7 +4,8 @@ const {
     getNotifications,
     deleteNotification,
     markNotificationRead,
-    markAllNotificationsRead
+    markAllNotificationsRead,
+    DeleteAllNotifications
 } = require('../../Controllers/application/Notification');
 const verifyToken = require('../../middleware/auth');
 
@@ -18,6 +19,7 @@ router.put('/mark-as-read/:notificationId', verifyToken, markNotificationRead);
 
 // ✅ MARK ALL notifications as read
 router.put('/mark-all-read', verifyToken, markAllNotificationsRead);
+router.put('/delete-all', verifyToken, DeleteAllNotifications);
 
 
 module.exports = router;

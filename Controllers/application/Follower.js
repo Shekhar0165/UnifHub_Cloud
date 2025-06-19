@@ -229,7 +229,7 @@ const HandleAddFollower = async (req, res) => {
         const userEntityText = detectedEntityType === 'organization' ? 'organization' : 'profile';
         
         const notificationItem = {
-            type: 'follow',
+            type: 'follows',
             title: `New Follower!`,
             message: `${followerExists.name} (${followerEntityText}) started following your ${userEntityText}.`,
             time: new Date(),
@@ -240,6 +240,8 @@ const HandleAddFollower = async (req, res) => {
                 ? `/organization/${FollowerEntry.userid}` 
                 : `/user/${FollowerEntry.userid}`
         };
+
+        console.log("working",notificationItem?.type)
 
         await HandleSendNotificationOnPlatfrom(notificationItem, userExists);
 

@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const CloudinaryConfig = require('../../config/CloudinaryConfig');
 const { HandleSendLikeNotifiction,HandleSendCommentNotification,HandleSendNotificationOnPlatfrom } = require('./Notification');
 const Follower = require('../../models/Follower');
+const Organization = require('../../models/Organizations');
 const fs = require('fs').promises;
 
 // Helper function to extract public ID from Cloudinary URL
@@ -117,7 +118,10 @@ const sendPostNotificationsToFollowers = async (userId, postData, postId) => {
                 promises.push((async () => {
                     try {
                         // Get follower user details
-                        const followerUser = await User.findOne({ userid: follower.userid });
+                        let followerUser = await User.findOne({ userid: follower.userid });
+                        if (!followerUser) {
+                            followerUser = await Organization.findOne({ userid: follower.userid });
+                        }
                         if (!followerUser) {
                             console.log(`Follower user not found: ${follower.userid}`);
                             return;
@@ -141,7 +145,7 @@ const sendPostNotificationsToFollowers = async (userId, postData, postId) => {
                         } else {
                             // Regular post notification
                             notificationData = {
-                                type: 'post',
+                                type: 'posts',
                                 title: '📝 New Post from ' + postCreator.name,
                                 message: `${postCreator.name} shared: "${postData.title || postData.content.substring(0, 50)}${postData.description.length > 50 ? '...' : ''}"`,
                                 time: new Date(),

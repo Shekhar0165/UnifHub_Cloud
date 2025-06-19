@@ -2,6 +2,7 @@ const Notification = require('../../models/Notification');
 const Organization = require('../../models/Organizations');
 const { listenerCount } = require('../../models/Organizations');
 const User = require('../../models/User');
+const UserSettings = require('../../models/UserSettings')
 
 let globalSocket, globalIo, globalClient;
 
@@ -12,12 +13,35 @@ const HandlePushNotification = (socket, io, client) => {
 };
 
 const HandleSendLikeNotifiction = async (userId, post, req) => {
+
+    const usersettings = await UserSettings.findOne({ userId: userId });
+
+    if (!usersettings) {
+        const defaultSettings = {
+            notifications: {
+                likes: true,
+                comments: true,
+                follows: true,
+                messages: true,
+                posts: true,
+            },
+            privateAccount: true,
+            showOnlineStatus: true
+        };
+
+        await UserSettings.create({ userId: user._id, ...defaultSettings });
+    }
+
+    if (!usersettings.notifications.likes) {
+        console.log("do not send notifcaiton", userId)
+        return
+    }
     const recipientActiveChat = await globalClient.hGet('online_users', userId.toString());
     let user = await User.findById(req.user.id);
     const PostUser = await User.findById(userId)
 
     console.log("linke post ")
-    
+
     if (!user) {
         user = await Organization.findById(req.user.id)
     }
@@ -37,7 +61,7 @@ const HandleSendLikeNotifiction = async (userId, post, req) => {
         read: false,
         avatar: '👩‍💻',
         icon: "Heart",
-        link:`/user/${PostUser.userid}/post/${post._id}`
+        link: `/user/${PostUser.userid}/post/${post._id}`
     };
 
     // Save notification in DB
@@ -49,11 +73,11 @@ const HandleSendLikeNotifiction = async (userId, post, req) => {
             userid: userId,
             notification: [notificationItem]
         });
-        
+
         const savedDoc = await notificationDoc.save();
         // Get the ID of the first (and only) notification in the array
         const savedNotificationId = savedDoc.notification[0]._id;
-        
+
         // Add the ID to the notification item before emitting
         const notificationWithId = {
             ...notificationItem,
@@ -64,16 +88,16 @@ const HandleSendLikeNotifiction = async (userId, post, req) => {
         if (recipientActiveChat) {
             globalIo.to(recipientActiveChat).emit("Notification", notificationWithId);
         }
-        
+
     } else {
         // Push into existing notification array
         notificationDoc.notification.push(notificationItem);
         const savedDoc = await notificationDoc.save();
-        
+
         // Get the ID of the last notification (the one we just added)
         const lastIndex = savedDoc.notification.length - 1;
         const savedNotificationId = savedDoc.notification[lastIndex]._id;
-        
+
         // Add the ID to the notification item before emitting
         const notificationWithId = {
             ...notificationItem,
@@ -85,12 +109,133 @@ const HandleSendLikeNotifiction = async (userId, post, req) => {
             globalIo.to(recipientActiveChat).emit("Notification", notificationWithId);
         }
     }
-    
+
     console.log("Notification saved and emitted with ID");
 };
 
+const HandleSendMessageNotification = async (to, messageData, fromUser) => {
+    console.log('to:', to, "messageData:", messageData, "fromUser:", fromUser)
+    const usersettings = await UserSettings.findOne({ userId: to });
+
+    if (!usersettings) {
+        const defaultSettings = {
+            notifications: {
+                likes: true,
+                comments: true,
+                follows: true,
+                messages: true,
+                posts: true,
+            },
+            privateAccount: true,
+            showOnlineStatus: true
+        };
+
+        await UserSettings.create({ userId: to, ...defaultSettings });
+    }
+
+    if (!usersettings.notifications.messages) {
+        console.log("do not send notifcaiton", to)
+        return
+    }
+    const recipientActiveChat = await globalClient.hGet('online_users', to);
+    const preview = messageData.message.length > 30 ? `${messageData.message.slice(0, 30)}...` : messageData.message;
+    const content = `${messageData.from.name} sent you a message: "${preview}"`;
+
+    const notificationItem = {
+        type: 'message',
+        title: 'New Message',
+        message: content,
+        time: new Date(),
+        read: false,
+        avatar: '👩‍💻',
+        icon: "MessageCircle",
+        link: `/messages?tab=/${messageData.from.userid}`
+    };
+
+    // Save notification in DB
+    let notificationDoc = await Notification.findOne({ userid: to });
+
+    if (!notificationDoc) {
+        // Create new notification doc for this user
+        notificationDoc = new Notification({
+            userid: to,
+            notification: [notificationItem]
+        });
+
+        const savedDoc = await notificationDoc.save();
+        // Get the ID of the first (and only) notification in the array
+        const savedNotificationId = savedDoc.notification[0]._id;
+
+        // Add the ID to the notification item before emitting
+        const notificationWithId = {
+            ...notificationItem,
+            _id: savedNotificationId
+        };
+
+        // Emit to user if online
+        if (recipientActiveChat) {
+            globalIo.to(recipientActiveChat).emit("Notification", notificationWithId);
+            globalIo.to(to).emit('messageNotification', {
+                ...messageData,
+                type: 'new_message',
+                fromUser: fromUser
+            });
+        }
+
+    } else {
+        // Push into existing notification array
+        notificationDoc.notification.push(notificationItem);
+        const savedDoc = await notificationDoc.save();
+
+        // Get the ID of the last notification (the one we just added)
+        const lastIndex = savedDoc.notification.length - 1;
+        const savedNotificationId = savedDoc.notification[lastIndex]._id;
+
+        // Add the ID to the notification item before emitting
+        const notificationWithId = {
+            ...notificationItem,
+            _id: savedNotificationId
+        };
+
+        // Emit to user if online
+        if (recipientActiveChat) {
+            globalIo.to(recipientActiveChat).emit("Notification", notificationWithId);
+            globalIo.to(to).emit('messageNotification', {
+                ...messageData,
+                type: 'new_message',
+                fromUser: fromUser
+            });
+        }
+    }
+}
+
 
 const HandleSendCommentNotification = async (userId, post, req) => {
+
+    const usersettings = await UserSettings.findOne({ userId: userId });
+
+    if (!usersettings) {
+        const defaultSettings = {
+            notifications: {
+                likes: true,
+                comments: true,
+                follows: true,
+                messages: true,
+                posts: true,
+            },
+            privateAccount: true,
+            showOnlineStatus: true
+        };
+
+        await UserSettings.create({ userId: user._id, ...defaultSettings });
+    }
+
+    if (!usersettings.notifications.comments) {
+        console.log("do not send notifcaiton", userId)
+        return
+    }
+
+
     const recipientActiveChat = await globalClient.hGet('online_users', userId.toString());
     let user = await User.findById(req.user.id);
     const PostUser = await User.findById(userId)
@@ -111,7 +256,7 @@ const HandleSendCommentNotification = async (userId, post, req) => {
         read: false,
         avatar: '👨‍💼',
         icon: "MessageSquare",
-        link:`/user/${PostUser.userid}/post/${post._id}`
+        link: `/user/${PostUser.userid}/post/${post._id}`
     };
 
     // Save comment notification in DB
@@ -160,7 +305,7 @@ const HandleSendCommentNotification = async (userId, post, req) => {
 };
 
 
-const HandleSendJoinNotification = async (user,type)=>{
+const HandleSendJoinNotification = async (user, type) => {
     console.log(user)
     const recipientActiveChat = await globalClient.hGet('online_users', user._id.toString());
     const notificationItem = {
@@ -171,7 +316,7 @@ const HandleSendJoinNotification = async (user,type)=>{
         read: false,
         avatar: '👨‍💼',
         icon: "UserPlus",
-        link:`/${type}/${user.userid}`
+        link: `/${type}/${user.userid}`
     };
 
 
@@ -220,11 +365,10 @@ const HandleSendJoinNotification = async (user,type)=>{
     }
 }
 
-const handleSendNotificationtoParticipants = async(notificationItem,user)=>{
-    console.log("workin",user)
+const handleSendNotificationtoParticipants = async (notificationItem, user) => {
     const recipientActiveChat = await globalClient.hGet('online_users', user.id.toString());
     let notificationDoc = await Notification.findOne({ userid: user.id });
-    console.log("working")
+
 
     if (!notificationDoc) {
         console.log("working inside1")
@@ -271,10 +415,33 @@ const handleSendNotificationtoParticipants = async(notificationItem,user)=>{
     console.log("comeplete")
 }
 
-const HandleSendNotificationOnPlatfrom=async(notificationItem,user)=>{
-    console.log(user)
+const HandleSendNotificationOnPlatfrom = async (notificationItem, user) => {
+
+
+    const Newtype = notificationItem.type;
+    const usersettings = await UserSettings.findOne({ userId: user._id });
+    if (!usersettings) {
+        const defaultSettings = {
+            notifications: {
+                likes: true,
+                comments: true,
+                follows: true,
+                messages: true,
+                posts: true,
+            },
+            privateAccount: true,
+            showOnlineStatus: true
+        };
+
+        await UserSettings.create({ userId: user._id, ...defaultSettings });
+    }
+    if (usersettings.notifications[Newtype] === false) {
+        console.log("do not send notification", user._id)
+        return;
+    }
+
     const recipientActiveChat = await globalClient.hGet('online_users', user._id.toString());
-    let notificationDoc = await Notification.findOne({ userid: user._id });
+    let notificationDoc = await Notification.findOne({ userid: user._id.toString() });
 
     if (!notificationDoc) {
         // Create a new notification document
@@ -331,7 +498,7 @@ const getNotifications = async (req, res) => {
         const notifications = await Notification.findOne({ userid: userId });
 
         if (!notifications || !notifications.notification || notifications.notification.length === 0) {
-            return res.status(200).json({ 
+            return res.status(200).json({
                 notifications: [],
                 pagination: {
                     currentPage: page,
@@ -347,13 +514,13 @@ const getNotifications = async (req, res) => {
         const allNotifications = notifications.notification.reverse();
         const totalNotifications = allNotifications.length;
         const totalPages = Math.ceil(totalNotifications / limit);
-        
+
         // Calculate pagination
         const startIndex = (page - 1) * limit;
         const endIndex = startIndex + limit;
         const paginatedNotifications = allNotifications.slice(startIndex, endIndex);
 
-        res.status(200).json({ 
+        res.status(200).json({
             notifications: paginatedNotifications,
             pagination: {
                 currentPage: page,
@@ -448,6 +615,35 @@ const markAllNotificationsRead = async (req, res) => {
 };
 
 
+const DeleteAllNotifications = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Find the notification document for the user
+        const notificationDoc = await Notification.findOne({ userid: userId });
+
+        if (!notificationDoc) {
+            return res.status(404).json({ error: 'Notification list not found' });
+        }
+
+        // Clear the notifications array
+        notificationDoc.notification = [];
+
+        // Save the updated document
+        await notificationDoc.save();
+
+        res.status(200).json({ message: 'All notifications deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting all notifications:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+
+
+
+
+
 module.exports = {
     HandlePushNotification,
     HandleSendLikeNotifiction,
@@ -458,5 +654,7 @@ module.exports = {
     markAllNotificationsRead,
     HandleSendJoinNotification,
     HandleSendNotificationOnPlatfrom,
-    handleSendNotificationtoParticipants
+    handleSendNotificationtoParticipants,
+    DeleteAllNotifications,
+    HandleSendMessageNotification
 };

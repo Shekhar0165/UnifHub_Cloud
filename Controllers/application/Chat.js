@@ -2,6 +2,7 @@ const User = require("../../models/User");
 const Organization = require('../../models/Organizations');
 const Conversation = require("../../models/Conversation");
 const { v4: uuidv4 } = require('uuid');
+const {HandleSendMessageNotification} = require('../application/Notification')
 
 const HandleMakeConnection = (socket, io, client) => {
   socket.on('user-connected', async (userId) => {
@@ -158,11 +159,12 @@ const HandlePrivateMessage = (socket, io, client) => {
       } else {
         io.to(to).emit('message-count', messageData);
         // User is not actively viewing this chat
-        io.to(to).emit('messageNotification', {
-          ...messageData,
-          type: 'new_message',
-          fromUser: from
-        });
+        await HandleSendMessageNotification(to,messageData,from)
+        // io.to(to).emit('messageNotification', {
+        //   ...messageData,
+        //   type: 'new_message',
+        //   fromUser: from
+        // });
       }
 
       socket.emit('messageSent', messageData);
