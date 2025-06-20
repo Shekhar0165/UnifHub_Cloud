@@ -3,9 +3,18 @@ const jwt = require('jsonwebtoken');
 const User = require('../../models/User');
 const Organization = require('../../models/Organizations');
 const { generateUserResume } = require('../application/UserResume');
+import { OAuth2Client } from 'google-auth-library';
 require('dotenv').config();
-const {client} = require('../../config/GoogleAuthConfig');
-const { default: axios } = require('axios');
+
+// Password validation function
+const validatePassword = (password) => {
+  // Password must be at least 8 characters
+  if (password.length < 8) {
+    return { valid: false, message: 'Password must be at least 8 characters long.' };
+  }
+
+  return { valid: true };
+};
 
 
 
@@ -27,16 +36,6 @@ const setCookies = (res, tokens) => {
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
-};
-
-// Password validation function
-const validatePassword = (password) => {
-  // Password must be at least 8 characters
-  if (password.length < 8) {
-    return { valid: false, message: 'Password must be at least 8 characters long.' };
-  }
-
-  return { valid: true };
 };
 
 const LoginUser = async (req, res) => {
@@ -63,11 +62,11 @@ const LoginUser = async (req, res) => {
       $or: [{ userid: Newidentifier }, { email: Newidentifier }]
     });
 
-    
+
     // Check if identifier belongs to an Organization
-      const organization = await Organization.findOne({
-        $or: [{ userid: Newidentifier }, { email: Newidentifier }]
-      });
+    const organization = await Organization.findOne({
+      $or: [{ userid: Newidentifier }, { email: Newidentifier }]
+    });
 
     // If neither a user nor an organization exists, return an error
     if (!user && !organization) {
@@ -90,14 +89,14 @@ const LoginUser = async (req, res) => {
 
     // Generate JWT access token (expires in 1 day)
     const accessToken = jwt.sign(
-      { id: account._id, type: userType, userid:userid },
+      { id: account._id, type: userType, userid: userid },
       process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: '1d' }
     );
 
     // Generate refresh token (expires in 7 days)
     const refreshToken = jwt.sign(
-      { id: account._id, type: userType,userType, userid:userid  },
+      { id: account._id, type: userType, userType, userid: userid },
       process.env.REFRESH_TOKEN_SECRET,
       { expiresIn: '7d' }
     );
@@ -137,7 +136,7 @@ const LoginUser = async (req, res) => {
       type: userType,
       user: {
         userid: account.userid,
-        usertype:userType
+        usertype: userType
       },
       accessToken,
       refreshToken
@@ -151,8 +150,10 @@ const LoginUser = async (req, res) => {
 
 
 const HandleRegisterUserFromGoogle = async (req, res) => {
+  const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  
   try {
-    const { token, accountType } = req.body;
+    const { token, accountType } = req.body; //needed for new registrations
     console.log("Google authentication token:", token);
     console.log("Account type (if registering):", accountType);
 
@@ -163,23 +164,19 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
       });
     }
 
-    const googleRes = await client.getToken(token);
-
-    const userRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        Authorization: `Bearer ${googleRes.tokens.access_token}`
-      }
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
     });
 
-
-    if (!userRes.data || !userRes.data.email) {
+    if (!ticket) {
       return res.status(400).json({
         success: false,
         message: 'Invalid Google token'
       });
     }
 
-    const payload = userRes.data;
+    const payload = ticket.getPayload();
     if (!payload) {
       return res.status(400).json({
         success: false,
@@ -187,15 +184,11 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
       });
     }
 
-    console.log('Google payload:', payload);
-
     const { sub, email, name, picture } = payload;
     
     let account;
     let userType;
     let isNewAccount = false;
-
-    
 
     // First check if user exists (same logic as LoginUser)
     const existingUser = await User.findOne({ email });
@@ -212,19 +205,22 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
     // If user exists, login (like LoginUser logic)
     if (existingUser) {
       account = existingUser;
-      userType = 'individual';
+      userType = "individual";
+      // Update user info from Google
+      account.name = name;
     } else if (existingOrganization) {
       account = existingOrganization;
-      userType = 'organization';
+      userType = "Organization";
+      account.name = name;
     } else {
       // No existing account - this is registration
       isNewAccount = true;
+      
       // For new registration, accountType is required
       if (!accountType || !['individual', 'Organization'].includes(accountType)) {
-        return res.status(200).json({
-          success: true,
-          message: 'Account type is required for new registration. Must be either "individual" or "Organization"',
-          isNewAccount
+        return res.status(400).json({
+          success: false,
+          message: 'Account type is required for new registration. Must be either "individual" or "Organization"'
         });
       }
       
@@ -246,7 +242,6 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
           name,
           email,
           userid,
-          profileImage: picture,
           password: await bcrypt.hash(sub + Date.now(), 10)
         });
       } else {
@@ -254,7 +249,6 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
           name,
           email,
           userid,
-          profileImage: picture,
           password: await bcrypt.hash(sub + Date.now(), 10)
         });
       }
@@ -268,7 +262,7 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
     );
 
     const refreshToken = jwt.sign(
-      { id: account._id, type: userType, userid: account.userid }, // Removed duplicate userType
+      { id: account._id, type: userType, userType, userid: account.userid },
       process.env.REFRESH_TOKEN_SECRET,
       { expiresIn: '7d' }
     );
@@ -293,13 +287,6 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
     setCookies(res, tokens);
     console.log('Cookies set successfully');
 
-    console.log('User details:', {
-      email: account.email,
-      name: account.name,
-      profileImage: account.profileImage,
-      usertype: userType,
-    });
-
     return res.status(200).json({
       success: true,
       message: isNewAccount ? 'Registration successful' : 'Login successful',
@@ -308,12 +295,10 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
         userid: account.userid,
         usertype: userType,
         email: account.email,
-        name: account.name,
-        profileImage: account.profileImage
+        name: account.name
       },
       accessToken,
-      refreshToken,
-      isNewAccount
+      refreshToken
     });
 
   } catch (error) {

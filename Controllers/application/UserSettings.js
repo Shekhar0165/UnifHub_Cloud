@@ -147,9 +147,6 @@ const HandleUpdateOnlineStatus = async (req, res) => {
 const HandleEnableAllUserSettings = async (req, res) => {
   try {
     const id = req.user.id;
-
-    console.log("usesettings",id);
-
     // Define all settings as true
     const defaultSettings = {
       notifications: {
@@ -163,27 +160,7 @@ const HandleEnableAllUserSettings = async (req, res) => {
       showOnlineStatus: true
     };
 
-    console.log(defaultSettings)
-
-    // Try to find existing settings
-    // let settings = await UserSettings.findOne({ userId: id });
-    // console.log(settings)
-
     settings = await UserSettings.create({ userId: id, ...defaultSettings });
-    // if (!settings) {
-    //   // If not found, create with default true settings
-
-    //   console.log("settings in if",settings)
-    // } else {
-    //   // If found, update all to true
-    //   settings = await UserSettings.findOneAndUpdate(
-    //     { userId: id },
-    //     { $set: defaultSettings },
-    //     { new: true }
-    //   );
-    // }
-
-    console.log("settings",settings)
 
     res.status(200).json(settings);
   } catch (error) {
