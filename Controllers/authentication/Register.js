@@ -260,24 +260,24 @@ const registerUser = async (req, res) => {
         // Replace your cookie setting code with this:
 
         // Set access token cookie
-        res.cookie('accessToken', accessToken, {
-            httpOnly: true,
-            secure: true, // Always true for production HTTPS
-            sameSite: "None", // Required for cross-origin
-            domain: '.unifhub.fun', // This allows cookie to work on both subdomains
-            path: '/',
-            maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
-        });
+        // res.cookie('accessToken', accessToken, {
+        //     httpOnly: true,
+        //     secure: true, // Always true for production HTTPS
+        //     sameSite: "None", // Required for cross-origin
+        //     domain: '.unifhub.fun', // This allows cookie to work on both subdomains
+        //     path: '/',
+        //     maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
+        // });
 
-        // Set refresh token cookie
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: true, // Always true for production HTTPS
-            sameSite: "None", // Required for cross-origin
-            domain: '.unifhub.fun', // This allows cookie to work on both subdomains
-            path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-        });
+        // // Set refresh token cookie
+        // res.cookie('refreshToken', refreshToken, {
+        //     httpOnly: true,
+        //     secure: true, // Always true for production HTTPS
+        //     sameSite: "None", // Required for cross-origin
+        //     domain: '.unifhub.fun', // This allows cookie to work on both subdomains
+        //     path: '/',
+        //     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        // });
         // Cleanup OTP instance after successful registration
         delete otpInstances[email];
 
@@ -418,24 +418,24 @@ const registerOrganization = async (req, res) => {
         // Replace your cookie setting code with this:
 
         // Set access token cookie
-        res.cookie('accessToken', accessToken, {
-            httpOnly: true,
-            secure: true, // Always true for production HTTPS
-            sameSite: "None", // Required for cross-origin
-            domain: '.unifhub.fun', // This allows cookie to work on both subdomains
-            path: '/',
-            maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
-        });
+        // res.cookie('accessToken', accessToken, {
+        //     httpOnly: true,
+        //     secure: true, // Always true for production HTTPS
+        //     sameSite: "None", // Required for cross-origin
+        //     domain: '.unifhub.fun', // This allows cookie to work on both subdomains
+        //     path: '/',
+        //     maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
+        // });
 
-        // Set refresh token cookie
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: true, // Always true for production HTTPS
-            sameSite: "None", // Required for cross-origin
-            domain: '.unifhub.fun', // This allows cookie to work on both subdomains
-            path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-        });
+        // // Set refresh token cookie
+        // res.cookie('refreshToken', refreshToken, {
+        //     httpOnly: true,
+        //     secure: true, // Always true for production HTTPS
+        //     sameSite: "None", // Required for cross-origin
+        //     domain: '.unifhub.fun', // This allows cookie to work on both subdomains
+        //     path: '/',
+        //     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        // });
         // Cleanup OTP instance after successful registration
         delete otpInstances[email];
 
