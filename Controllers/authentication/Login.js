@@ -9,27 +9,6 @@ const { default: axios } = require('axios');
 
 
 
-const setCookies = (res, tokens) => {
-  // Access Token Cookie
-  res.cookie('accessToken', tokens.accessToken, {
-    httpOnly: true,
-    secure: true, // Always true for production HTTPS
-    sameSite: "None", // Required for cross-origin
-    domain: '.unifhub.fun', // This allows cookie to work on both subdomains
-    path: '/',
-    maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
-  });
-
-  // Refresh Token Cookie
-  res.cookie('refreshToken', tokens.refreshToken, {
-    httpOnly: true,
-    secure: true, // Always true for production HTTPS
-    sameSite: "None", // Required for cross-origin
-    domain: '.unifhub.fun', // This allows cookie to work on both subdomains
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 1 day
-  });
-};
 
 // Password validation function
 const validatePassword = (password) => {
@@ -294,7 +273,24 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
     }
 
     console.log('Setting cookies for account:', account.email);
-    setCookies(res, tokens);
+    res.cookie('accessToken', tokens.accessToken, {
+      httpOnly: true,
+      secure: true, // Always true for production HTTPS
+      sameSite: "None", // Required for cross-origin
+      domain: '.unifhub.fun', // This allows cookie to work on both subdomains
+      path: '/',
+      maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
+    });
+
+    // Set refresh token cookie
+    res.cookie('refreshToken', tokens.refreshToken, {
+      httpOnly: true,
+      secure: true, // Always true for production HTTPS
+      sameSite: "None", // Required for cross-origin
+      domain: '.unifhub.fun', // This allows cookie to work on both subdomains
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
     console.log('Cookies set successfully');
 
     console.log('User details:', {
