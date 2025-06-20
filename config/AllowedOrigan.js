@@ -9,7 +9,7 @@ AllowedOrigan = [
     "https://unifhub-backend.onrender.com",
     "http://13.203.171.150:3000",
     "http://13.203.171.150:8000",
-    "http://172.31.1.108:3000",
+    "https://unifhub.fun",
     "https://devunifhub.vercel.app",
     process.env.CLIENT_URL
 ]
