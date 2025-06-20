@@ -4,7 +4,7 @@ const User = require('../../models/User');
 const Organization = require('../../models/Organizations');
 const { generateUserResume } = require('../application/UserResume');
 require('dotenv').config();
-const {client} = require('../../config/GoogleAuthConfig');
+const { client } = require('../../config/GoogleAuthConfig');
 const { default: axios } = require('axios');
 
 
@@ -13,19 +13,21 @@ const setCookies = (res, tokens) => {
   // Access Token Cookie
   res.cookie('accessToken', tokens.accessToken, {
     httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
+    secure: true, // Always true for production HTTPS
+    sameSite: "None", // Required for cross-origin
+    domain: '.unifhub.fun', // This allows cookie to work on both subdomains
     path: '/',
-    maxAge: 15 * 60 * 1000
+    maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
   });
 
   // Refresh Token Cookie
   res.cookie('refreshToken', tokens.refreshToken, {
     httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
+    secure: true, // Always true for production HTTPS
+    sameSite: "None", // Required for cross-origin
+    domain: '.unifhub.fun', // This allows cookie to work on both subdomains
     path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 1 day
   });
 };
 
@@ -63,11 +65,11 @@ const LoginUser = async (req, res) => {
       $or: [{ userid: Newidentifier }, { email: Newidentifier }]
     });
 
-    
+
     // Check if identifier belongs to an Organization
-      const organization = await Organization.findOne({
-        $or: [{ userid: Newidentifier }, { email: Newidentifier }]
-      });
+    const organization = await Organization.findOne({
+      $or: [{ userid: Newidentifier }, { email: Newidentifier }]
+    });
 
     // If neither a user nor an organization exists, return an error
     if (!user && !organization) {
@@ -90,14 +92,14 @@ const LoginUser = async (req, res) => {
 
     // Generate JWT access token (expires in 1 day)
     const accessToken = jwt.sign(
-      { id: account._id, type: userType, userid:userid },
+      { id: account._id, type: userType, userid: userid },
       process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: '1d' }
     );
 
     // Generate refresh token (expires in 7 days)
     const refreshToken = jwt.sign(
-      { id: account._id, type: userType,userType, userid:userid  },
+      { id: account._id, type: userType, userType, userid: userid },
       process.env.REFRESH_TOKEN_SECRET,
       { expiresIn: '7d' }
     );
@@ -114,19 +116,21 @@ const LoginUser = async (req, res) => {
       });
     }
 
-    // Set cookies
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? "None" : "Lax",
+      secure: true, // Always true for production HTTPS
+      sameSite: "None", // Required for cross-origin
+      domain: '.unifhub.fun', // This allows cookie to work on both subdomains
       path: '/',
       maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
     });
 
+    // Set refresh token cookie
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? "None" : "Lax",
+      secure: true, // Always true for production HTTPS
+      sameSite: "None", // Required for cross-origin
+      domain: '.unifhub.fun', // This allows cookie to work on both subdomains
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
@@ -137,7 +141,7 @@ const LoginUser = async (req, res) => {
       type: userType,
       user: {
         userid: account.userid,
-        usertype:userType
+        usertype: userType
       },
       accessToken,
       refreshToken
@@ -190,12 +194,12 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
     console.log('Google payload:', payload);
 
     const { sub, email, name, picture } = payload;
-    
+
     let account;
     let userType;
     let isNewAccount = false;
 
-    
+
 
     // First check if user exists (same logic as LoginUser)
     const existingUser = await User.findOne({ email });
@@ -227,14 +231,14 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
           isNewAccount
         });
       }
-      
+
       userType = accountType;
-      
+
       // Generate unique userid
       const baseUserid = email.split('@')[0].toLowerCase();
       let userid = baseUserid;
       let counter = 1;
-      
+
       // Check for userid uniqueness
       while (await User.findOne({ userid }) || await Organization.findOne({ userid })) {
         userid = `${baseUserid}${counter}`;
@@ -274,7 +278,7 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
     );
 
     account.refreshToken = refreshToken;
-    
+
     const tokens = {
       accessToken,
       refreshToken
@@ -326,4 +330,4 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
 };
 
 
-module.exports = { LoginUser,HandleRegisterUserFromGoogle };
+module.exports = { LoginUser, HandleRegisterUserFromGoogle };

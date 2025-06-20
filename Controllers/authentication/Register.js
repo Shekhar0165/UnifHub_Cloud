@@ -200,7 +200,7 @@ const registerUser = async (req, res) => {
         if (existingUserid) {
             return res.status(400).json({ message: 'User ID is already taken. Please choose another.' });
         }
-        
+
         const existingUseridInOrg = await Organization.findOne({ userid });
         if (existingUseridInOrg) {
             return res.status(400).json({ message: 'User ID is already taken. Please choose another.' });
@@ -257,27 +257,31 @@ const registerUser = async (req, res) => {
         const UserId = newUser.userid;
         console.log(UserId);
 
+        // Replace your cookie setting code with this:
+
+        // Set access token cookie
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? "None" : "Lax",
+            secure: true, // Always true for production HTTPS
+            sameSite: "None", // Required for cross-origin
+            domain: '.unifhub.fun', // This allows cookie to work on both subdomains
             path: '/',
             maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
         });
 
-        // Set refresh token in HTTP-only, Secure cookie
+        // Set refresh token cookie
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? "None" : "Lax",
+            secure: true, // Always true for production HTTPS
+            sameSite: "None", // Required for cross-origin
+            domain: '.unifhub.fun', // This allows cookie to work on both subdomains
             path: '/',
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
-
         // Cleanup OTP instance after successful registration
         delete otpInstances[email];
 
-        HandleSendJoinNotification(newUser,"user");
+        HandleSendJoinNotification(newUser, "user");
 
         // Send tokens in response body for localStorage
         console.log("User registered successfully");
@@ -301,7 +305,7 @@ const registerUser = async (req, res) => {
 
 const registerOrganization = async (req, res) => {
     try {
-        let { name, userid, email, password} = req.body;
+        let { name, userid, email, password } = req.body;
 
         // Validate required fields
         if (!name || !email) {
@@ -328,12 +332,12 @@ const registerOrganization = async (req, res) => {
         }
 
         // Double-check email isn't already used (in case concurrent registrations)
-       // Check if userid already exists
+        // Check if userid already exists
         const existingUserid = await User.findOne({ userid });
         if (existingUserid) {
             return res.status(400).json({ message: 'User ID is already taken. Please choose another.' });
         }
-        
+
         const existingUseridInOrg = await Organization.findOne({ userid });
         if (existingUseridInOrg) {
             return res.status(400).json({ message: 'User ID is already taken. Please choose another.' });
@@ -344,7 +348,7 @@ const registerOrganization = async (req, res) => {
         if (existingEmail) {
             return res.status(400).json({ message: 'Email is already registered. Please use another email or login.' });
         }
-        
+
         const existingEmailInOrg = await Organization.findOne({ email });
         if (existingEmailInOrg) {
             return res.status(400).json({ message: 'Email is already registered. Please use another email or login.' });
@@ -382,7 +386,7 @@ const registerOrganization = async (req, res) => {
                 title: "Joined UnifHub",
                 Date: new Date(),
                 description: `${org.name} joined UnifHub and started their journey.`,
-                achievementType: 'registration' 
+                achievementType: 'registration'
             }]
         };
 
@@ -411,27 +415,31 @@ const registerOrganization = async (req, res) => {
 
 
         // Set access token in HTTP-only, Secure cookie
+        // Replace your cookie setting code with this:
+
+        // Set access token cookie
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? "None" : "Lax",
+            secure: true, // Always true for production HTTPS
+            sameSite: "None", // Required for cross-origin
+            domain: '.unifhub.fun', // This allows cookie to work on both subdomains
             path: '/',
             maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
         });
 
-        // Set refresh token in HTTP-only, Secure cookie
+        // Set refresh token cookie
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? "None" : "Lax",
+            secure: true, // Always true for production HTTPS
+            sameSite: "None", // Required for cross-origin
+            domain: '.unifhub.fun', // This allows cookie to work on both subdomains
             path: '/',
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
-
         // Cleanup OTP instance after successful registration
         delete otpInstances[email];
 
-         HandleSendJoinNotification(newOrganization,"organization");
+        HandleSendJoinNotification(newOrganization, "organization");
 
         // Send tokens in response body for localStorage
         return res.status(201).json({
