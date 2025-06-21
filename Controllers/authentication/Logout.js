@@ -45,6 +45,7 @@ const clearCookies = (res) => {
         httpOnly: true,
         secure: true,
         sameSite: 'None',
+        domain: '.unifhub.fun', // ✅ ADD THIS - Must match login domain
         path: '/'
     };
     
@@ -53,6 +54,7 @@ const clearCookies = (res) => {
         secure: false,
         sameSite: 'Lax',
         path: '/'
+        // No domain for development (localhost)
     };
     
     const options = process.env.NODE_ENV === 'production' 

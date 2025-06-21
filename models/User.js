@@ -5,14 +5,14 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    userid:{
-        type:String,
-        required:true,
-        unique:true
+    userid: {
+        type: String,
+        required: true,
+        unique: true
     },
-    password:{
-        type:String,
-        required:true
+    password: {
+        type: String,
+        required: true
     },
     university: {
         type: String
@@ -38,11 +38,12 @@ const UserSchema = new mongoose.Schema({
     },
     profileImage: {
         type: String,
-        default:"https://res.cloudinary.com/dt9kpgtli/image/upload/v1750145996/users/plwv3hcxswbdehv9wtbd.jpg"
+        default: "https://res.cloudinary.com/dt9kpgtli/image/upload/v1750145996/users/plwv3hcxswbdehv9wtbd.jpg"
     },
     // Rest of your schema remains the same...
     coverImage: {
-        type: String
+        type: String,
+        default: "https://res.cloudinary.com/dt9kpgtli/image/upload/v1750500250/pexels-cup-of-couple-8015688_gn0d5t.jpg"
     },
     upcomingEvents: [
         {
@@ -89,8 +90,8 @@ const UserSchema = new mongoose.Schema({
         linkedin: String,
         twitter: String
     },
-    refreshToken:{
-        type:String
+    refreshToken: {
+        type: String
     }
 });
 

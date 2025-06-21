@@ -20,6 +20,7 @@ const validatePassword = (password) => {
   return { valid: true };
 };
 
+
 const LoginUser = async (req, res) => {
   const { identifier, password } = req.body;
 
@@ -263,6 +264,7 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
       refreshToken
     };
 
+        console.log('Generated tokens:', tokens);
     await account.save();
 
     // If it's a user (not an organization), update their resume
@@ -273,22 +275,20 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
     }
 
     console.log('Setting cookies for account:', account.email);
-    res.cookie('accessToken', tokens.accessToken, {
+    res.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: true, // Always true for production HTTPS
       sameSite: "None", // Required for cross-origin
       domain: '.unifhub.fun', // This allows cookie to work on both subdomains
-      path: '/',
       maxAge: 1 * 24 * 60 * 60 * 1000 // 1 day
     });
 
     // Set refresh token cookie
-    res.cookie('refreshToken', tokens.refreshToken, {
+    res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: true, // Always true for production HTTPS
       sameSite: "None", // Required for cross-origin
       domain: '.unifhub.fun', // This allows cookie to work on both subdomains
-      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
     console.log('Cookies set successfully');
@@ -324,6 +324,5 @@ const HandleRegisterUserFromGoogle = async (req, res) => {
     });
   }
 };
-
 
 module.exports = { LoginUser, HandleRegisterUserFromGoogle };

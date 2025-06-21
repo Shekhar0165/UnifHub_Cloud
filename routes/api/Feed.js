@@ -3,7 +3,7 @@ const router = express.Router();
 const {
     GetEnhancedUserFeed,
     RecordImpression,
-    GetFeedAnalytics
+    GetMoreFeedItems
 } = require('../../Controllers/application/Feed');
 const auth = require('../../middleware/auth');
 
@@ -12,7 +12,7 @@ const auth = require('../../middleware/auth');
 router.get('/', auth, GetEnhancedUserFeed);
 
 // Load more feed items
-router.post('/more', auth, GetFeedAnalytics);
+router.post('/more', auth, GetMoreFeedItems);
 
 // Record post impression
 router.post('/impression/:postId', auth, RecordImpression);
